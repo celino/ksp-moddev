@@ -1,4 +1,6 @@
-# ksp-moddev
+<h1><img src="docs/images/logo.png" alt="" width="56" align="center"> ksp-moddev</h1>
+
+![A kerbal at a mission control console, a whale carrying Unity and PartTools containers on the main screen, and a "MOAR STRUTS" sticky note](docs/images/banner.jpg)
 
 > *"Unity 2019.4.18f1 installed. No kerbals were harmed. Several were mildly
 > inconvenienced by the lack of snacks."*

@@ -1,5 +1,7 @@
 # Rebuilding an old mod's asset bundles for KSP 1.8+
 
+![A shipping container labeled ksp-moddev lifting off on four boosters, with a kerbal holding on to the top](images/launch.jpg)
+
 KSP 1.8 moved to Unity 2019.4, and it refuses asset bundles built with older
 Unity versions:
 
