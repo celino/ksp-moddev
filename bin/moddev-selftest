@@ -1,21 +1,24 @@
 #!/bin/bash
-# Confere se a imagem tem tudo. Não precisa de licença nem de GUI aberta.
+# Checks that the image has everything. Needs no license and no running desktop.
 set -uo pipefail
 fail=0
-check() { local name="$1"; shift; if out="$("$@" 2>&1)"; then printf '  ok    %-22s %s\n' "$name" "$(echo "$out" | head -1)"; else printf '  FALHA %-22s %s\n' "$name" "$(echo "$out" | tail -1)"; fail=1; fi; }
+check() { local name="$1"; shift; if out="$("$@" 2>&1)"; then printf '  ok    %-22s %s\n' "$name" "$(echo "$out" | head -1)"; else printf '  FAIL  %-22s %s\n' "$name" "$(echo "$out" | tail -1)"; fail=1; fi; }
 echo "ksp-moddev selftest"
 check "unity editor"      bash -c '"$UNITY_EDITOR" -version 2>/dev/null | grep -m1 "2019.4.18f1"'
-check "módulo windows"    bash -c 'ls -d /opt/unity/Editor/Data/PlaybackEngines/WindowsStandaloneSupport >/dev/null && echo WindowsStandaloneSupport'
+check "windows module"    bash -c 'ls -d /opt/unity/Editor/Data/PlaybackEngines/WindowsStandaloneSupport >/dev/null && echo WindowsStandaloneSupport'
 check "unity hub"         bash -c 'dpkg-query -W -f "\${Version}" unityhub'
+check "firefox"           bash -c 'firefox --version 2>/dev/null | grep -m1 Firefox'
+check "unityhub:// link"  bash -c 'h=$(xdg-mime query default x-scheme-handler/unityhub); grep -q "^Exec=unityhub-gui" "/usr/share/applications/$h" && echo "$h -> unityhub-gui"'
 check "dotnet sdk"        dotnet --version
-check "xvfb/openbox/vnc"  bash -c 'command -v Xvfb openbox x11vnc websockify >/dev/null && echo presentes'
+check "xvfb/openbox/vnc"  bash -c 'command -v Xvfb openbox x11vnc websockify >/dev/null && echo present'
 check "novnc"             bash -c 'test -f /usr/share/novnc/vnc.html && echo /usr/share/novnc'
 check "gl (llvmpipe)"     bash -c 'xvfb-run -a glxinfo -B | grep -m1 "OpenGL renderer"'
 check "parttools"         fetch-parttools
-check "uid do usuário"    bash -c 'echo "$(id -un) $(id -u):$(id -g)"'
+check "user uid"          bash -c 'echo "$(id -un) $(id -u):$(id -g)"'
 if [ -d "${KSP_DIR:-/ksp}/KSP_Data/Managed" ]; then
-  check "dlls do KSP (/ksp)" bash -c 'ls "$KSP_DIR/KSP_Data/Managed/Assembly-CSharp.dll"'
+  check "KSP dlls (/ksp)" bash -c 'ls "$KSP_DIR/KSP_Data/Managed/Assembly-CSharp.dll"'
 else
-  echo "  --    dlls do KSP (/ksp)     não montado (opcional)"
+  echo "  --    KSP dlls (/ksp)        not mounted (optional)"
 fi
-[ $fail = 0 ] && echo "tudo certo" || { echo "há falhas"; exit 1; }
+if moddev-license >/dev/null 2>&1; then echo "  ok    unity license          activated"; else echo "  --    unity license          not activated yet (docs/license.md)"; fi
+[ $fail = 0 ] && echo "all good" || { echo "some checks failed"; exit 1; }

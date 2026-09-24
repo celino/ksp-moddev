@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Right-click menu of the ksp-moddev virtual desktop. -->
+<openbox_menu xmlns="http://openbox.org/3.4/menu">
+  <menu id="root-menu" label="ksp-moddev">
+    <item label="Terminal"><action name="Execute"><command>xterm -fa Monospace -fs 11</command></action></item>
+    <item label="Unity Hub (license)"><action name="Execute"><command>unityhub-gui</command></action></item>
+    <item label="Unity Editor"><action name="Execute"><command>xterm -fa Monospace -fs 11 -e unity-gui</command></action></item>
+    <item label="Firefox"><action name="Execute"><command>firefox</command></action></item>
+    <separator />
+    <item label="Restart openbox"><action name="Restart" /></item>
+  </menu>
+</openbox_menu>

@@ -1,0 +1,16 @@
+#!/bin/bash
+# Shows whether a Unity license is activated. Unity 2019.4.18f1 already uses the
+# entitlement-based Licensing Client (the same one as Hub 3), so a license
+# activated in the Hub is picked up by the editor.
+found=0
+ULF="$HOME/.local/share/unity3d/Unity/Unity_lic.ulf"
+if [ -s "$ULF" ]; then
+  found=1; echo "legacy license file: $ULF"
+  grep -o -e '<StartDate Value="[^"]*"' -e '<StopDate Value="[^"]*"' "$ULF" | head -2
+fi
+for d in "$HOME/.local/share/unity3d/Unity/licenses" "$HOME/.config/unity3d/Unity/licenses"; do
+  if compgen -G "$d/*" >/dev/null; then
+    found=1; echo "entitlement licenses in $d:"; ls -1 "$d" | sed 's/^/  /'
+  fi
+done
+[ $found = 1 ] || { echo "no license activated yet (see docs/license.md)"; exit 1; }

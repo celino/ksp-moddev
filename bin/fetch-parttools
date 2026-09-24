@@ -1,9 +1,10 @@
 #!/bin/bash
-# Baixa o PartTools oficial da Squad pro KSP 1.12 (Unity 2019.4.18f1).
-# O link oficial (kerbalspaceprogram.com/files/PartTools_AssetBundles.zip) morreu
-# em 2025; usamos cópias do web.archive.org e conferimos o SHA-256. Duas cópias
-# independentes (link oficial em 22/11/2024 e anexo id=372 do fórum em
-# 27/09/2024) têm o mesmo hash. O arquivo é da Squad: não vai dentro da imagem.
+# Downloads Squad's official PartTools for KSP 1.12 (Unity 2019.4.18f1).
+# The official link (kerbalspaceprogram.com/files/PartTools_AssetBundles.zip)
+# went dead in 2025, so this uses web.archive.org copies and checks SHA-256.
+# Two independent copies (the official link on 2024-11-22 and forum attachment
+# id=372 on 2024-09-27) have the same hash. The file belongs to Squad, so it is
+# never baked into the image.
 set -euo pipefail
 DIR="${PARTTOOLS_DIR:-/opt/parttools}"
 PKG="$DIR/PartTools_PackageForModders.unitypackage"
@@ -13,16 +14,16 @@ URLS=(
   "https://web.archive.org/web/20240927111307id_/https://forum.kerbalspaceprogram.com/applications/core/interface/file/attachment.php?id=372"
 )
 if [ -s "$PKG" ] && [ "${1:-}" != "--force" ]; then
-  echo "PartTools já presente: $PKG"; exit 0
+  echo "PartTools already present: $PKG"; exit 0
 fi
 mkdir -p "$DIR"; tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 for u in "${URLS[@]}"; do
-  echo "baixando: $u"
+  echo "downloading: $u"
   if curl -fsSL --retry 3 -o "$tmp/pt.zip" "$u" \
      && echo "$SHA_ZIP  $tmp/pt.zip" | sha256sum -c --quiet -; then
     unzip -q -o "$tmp/pt.zip" -d "$DIR"
     echo "ok: $PKG"; exit 0
   fi
-  echo "falhou ou hash diferente, tentando a próxima cópia" >&2
+  echo "download failed or hash mismatch, trying the next copy" >&2
 done
-echo "não consegui baixar o PartTools" >&2; exit 1
+echo "could not download PartTools" >&2; exit 1

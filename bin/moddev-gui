@@ -1,7 +1,7 @@
 #!/bin/bash
-# Sobe o desktop virtual (:1) e o noVNC na porta 6080. Acesso: navegador em
-# http://localhost:6080/vnc.html (por SSH: ssh -L 6080:localhost:6080 <host>).
-# Fica em primeiro plano; Ctrl+C derruba tudo.
+# Starts the virtual desktop (:1) and noVNC on port 6080. Open
+# http://localhost:6080/vnc.html in a browser (from another machine:
+# ssh -L 6080:localhost:6080 <host>). Runs in the foreground; Ctrl+C stops it.
 set -euo pipefail
 GEOM="${MODDEV_GEOMETRY:-1920x1080x24}"
 Xvfb :1 -screen 0 "$GEOM" -nolisten tcp &
@@ -9,5 +9,5 @@ for _ in $(seq 50); do [ -e /tmp/.X11-unix/X1 ] && break; sleep 0.1; done
 export DISPLAY=:1
 openbox &
 x11vnc -display :1 -forever -shared -nopw -localhost -quiet -rfbport 5900 &
-echo "noVNC em http://localhost:6080/vnc.html"
+echo "noVNC at http://localhost:6080/vnc.html (right-click the desktop for the menu)"
 exec websockify --web /usr/share/novnc 6080 localhost:5900

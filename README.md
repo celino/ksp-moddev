@@ -1,58 +1,63 @@
 # ksp-moddev
 
-Ambiente em Docker pra desenvolver mods do **Kerbal Space Program 1.12** sem
-instalar Unity/Unity Hub no sistema:
+A Docker environment for developing **Kerbal Space Program 1.12** mods without
+installing Unity or Unity Hub on your system:
 
-- **Unity 2019.4.18f1** (a versão exata do KSP 1.12), com alvos Linux e Windows,
-  a partir da imagem [`unityci/editor`](https://hub.docker.com/r/unityci/editor) do GameCI
-- **Unity Hub**, só pra ativar a licença Personal (gratuita)
-- **Desktop virtual no navegador** (Xvfb + openbox + x11vnc + noVNC); funciona
-  por túnel SSH, sem GPU (OpenGL por software, llvmpipe)
-- **.NET SDK 8** pra compilar DLLs de mod (`net48`) contra as DLLs do jogo
-- **PartTools oficial da Squad pro 1.12**, baixado sob demanda e conferido por SHA-256
+- **Unity 2019.4.18f1** (the exact version KSP 1.12 runs on), with Linux and
+  Windows build targets, based on GameCI's [`unityci/editor`](https://hub.docker.com/r/unityci/editor) image
+- **Unity Hub + Firefox**, only to activate the free Personal license
+- **A virtual desktop in your browser** (Xvfb + openbox + x11vnc + noVNC). It works
+  over an SSH tunnel and needs no GPU (software OpenGL through llvmpipe)
+- **.NET SDK 8** to build mod DLLs (`net48`) against the game's own DLLs
+- **Squad's official PartTools for 1.12**, downloaded on demand and verified by SHA-256
 
-Nada da Squad/Take-Two vai dentro da imagem. As DLLs do jogo entram por volume
-somente leitura (`/ksp`), e o PartTools é baixado na primeira execução
-(`fetch-parttools`) de cópias do web.archive.org, porque o link oficial saiu do ar em 2025.
+Nothing from Squad/Take-Two is inside the image. The game's DLLs are mounted
+read-only (`/ksp`), and PartTools is downloaded on first use (`fetch-parttools`)
+from web.archive.org copies, since the official link went dead in 2025.
 
-## Uso
+## Quick start
 
 ```sh
 docker compose build
-docker compose run --rm moddev moddev-selftest   # confere tudo, sem subir nada
-docker compose up -d                             # sobe o desktop (noVNC)
+docker compose run --rm moddev moddev-selftest   # checks everything, starts nothing
+docker compose up -d                             # starts the virtual desktop
 ```
 
-Desktop: <http://localhost:6080/vnc.html>. A porta só escuta em `127.0.0.1`;
-de outra máquina, use `ssh -L 6080:localhost:6080 <host>` e abra o mesmo endereço.
+Desktop: <http://localhost:6080/vnc.html>. The port only listens on `127.0.0.1`.
+From another machine, run `ssh -L 6080:localhost:6080 <host>` and open the same address.
 
-Dentro do desktop (clique direito → Terminal, ou `docker exec -it ksp-moddev bash`):
+**First time:** activate the Unity license, following [docs/license.md](docs/license.md).
 
-| comando | o quê |
+Right-click the desktop for the menu (Terminal, Unity Hub, Unity Editor, Firefox),
+or get a shell with `docker exec -it ksp-moddev bash`.
+
+| command | what it does |
 |---|---|
-| `unityhub-gui` | abre o Hub; login + ativar licença Personal (uma vez; fica no volume `home`) |
-| `unity-gui /work/<projeto>` | abre o editor no projeto |
-| `fetch-parttools` | baixa `PartTools_PackageForModders.unitypackage` em `/opt/parttools` |
-| `moddev-selftest` | checagem rápida da imagem |
+| `unityhub-gui` | opens Unity Hub (only needed to activate the license) |
+| `moddev-license` | shows whether a license is activated |
+| `unity-gui /work/<project>` | opens the editor on a project |
+| `fetch-parttools` | downloads `PartTools_PackageForModders.unitypackage` into `/opt/parttools` |
+| `moddev-selftest` | quick check of the image |
 
-Pra importar o PartTools num projeto: *Assets → Import Package → Custom Package…* →
+To add PartTools to a project: *Assets → Import Package → Custom Package…* →
 `/opt/parttools/PartTools_PackageForModders.unitypackage`.
 
 ## Volumes
 
-| no container | origem (padrão) | pra quê |
+| in the container | source (default) | purpose |
 |---|---|---|
-| `/work` | `$KSP_WORK` = `/mnt/projects/projects/ksp` | seus repos de mods |
-| `/ksp` (ro) | `$KSP_GAME` = instalação Steam do KSP | `KSP_Data/Managed/*.dll` pra compilar |
-| `/home/modder` | volume `home` | licença Unity, config do Hub, caches |
-| `/opt/parttools` | volume `parttools` | PartTools baixado |
+| `/work` | `$KSP_WORK` = `/mnt/projects/projects/ksp` | your mod repos |
+| `/ksp` (ro) | `$KSP_GAME` = Steam's KSP install | `KSP_Data/Managed/*.dll` to build against |
+| `/home/modder` | volume `home` | Unity license, Hub config, caches |
+| `/opt/parttools` | volume `parttools` | downloaded PartTools |
 
-Variáveis opcionais (num `.env` ao lado do `compose.yml`): `KSP_WORK`, `KSP_GAME`,
-`MODDEV_UID`/`MODDEV_GID` (padrão 1000, igual ao dono dos repos) e `MODDEV_GEOMETRY`.
+Optional variables, in a `.env` next to `compose.yml`: `KSP_WORK`, `KSP_GAME`,
+`MODDEV_UID`/`MODDEV_GID` (default 1000; match the owner of your repos) and
+`MODDEV_GEOMETRY` (default `1920x1080x24`).
 
-## Compilar uma DLL de mod
+## Building a mod DLL
 
-Projeto SDK-style mirando `net48`, referenciando as DLLs do jogo em `/ksp`:
+Use an SDK-style project targeting `net48` that references the game's DLLs in `/ksp`:
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
@@ -65,11 +70,11 @@ Projeto SDK-style mirando `net48`, referenciando as DLLs do jogo em `/ksp`:
 </Project>
 ```
 
-`dotnet build -c Release`.
+Then run `dotnet build -c Release`.
 
-## Licenças
+## Licenses
 
-Os scripts e o Dockerfile deste repo são MIT. O Unity Editor segue a licença da
-Unity (a Personal exige ativação com conta própria); a imagem base é do
-[GameCI](https://game.ci). O PartTools e as DLLs do KSP são da Squad/Take-Two e
-não são redistribuídos aqui.
+The scripts and Dockerfile in this repo are MIT. The Unity Editor is under
+Unity's terms (the Personal license needs activation with your own Unity ID).
+The base image comes from [GameCI](https://game.ci). PartTools and the KSP DLLs
+belong to Squad/Take-Two and are not redistributed here.

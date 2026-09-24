@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Unity Hub (ksp-moddev)
+Comment=Unity Hub started with --no-sandbox, so it works inside the container
+Exec=unityhub-gui %U
+Terminal=false
+Type=Application
+NoDisplay=true
+MimeType=x-scheme-handler/unityhub;application/x-unityhub;

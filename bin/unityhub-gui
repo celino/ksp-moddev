@@ -1,5 +1,6 @@
 #!/bin/bash
-# Abre o Unity Hub no desktop virtual, só pra ativar a licença Personal.
-# A licença (~/.local/share/unity3d/Unity/Unity_lic.ulf) fica no volume do home.
+# Opens Unity Hub on the virtual desktop, only to activate the Personal license.
+# Also the handler for unityhub:// links (the sign-in callback). The license
+# (~/.local/share/unity3d/Unity/Unity_lic.ulf) lives in the home volume.
 export DISPLAY="${DISPLAY:-:1}"
-exec unityhub --no-sandbox "$@"
+exec unityhub --no-sandbox --disable-gpu "$@"
