@@ -1,0 +1,28 @@
+# ksp-moddev — `docker compose run --rm moddev moddev-selftest` testa a imagem;
+# `docker compose up -d` sobe o desktop virtual (noVNC em 127.0.0.1:6080).
+name: ksp-moddev
+
+services:
+  moddev:
+    build:
+      context: .
+      args:
+        USER_UID: ${MODDEV_UID:-1000}
+        USER_GID: ${MODDEV_GID:-1000}
+    image: ksp-moddev:2019.4.18f1
+    container_name: ksp-moddev
+    command: moddev-gui
+    shm_size: 2gb
+    ports:
+      - "127.0.0.1:6080:6080"     # só local; de fora, via túnel SSH
+    environment:
+      MODDEV_GEOMETRY: ${MODDEV_GEOMETRY:-1920x1080x24}
+    volumes:
+      - home:/home/modder                       # licença Unity, config do Hub, caches
+      - parttools:/opt/parttools                # PartTools baixado (não vai na imagem)
+      - ${KSP_WORK:-/mnt/projects/projects/ksp}:/work
+      - ${KSP_GAME:-${HOME}/.steam/debian-installation/steamapps/common/Kerbal Space Program}:/ksp:ro
+
+volumes:
+  home:
+  parttools:

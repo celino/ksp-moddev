@@ -1,0 +1,8 @@
+#!/bin/bash
+# Abre o editor Unity no desktop virtual. Uso: unity-gui [caminho-do-projeto]
+# Sem licença ativada, rode antes `unityhub-gui` e faça login (Personal).
+set -euo pipefail
+export DISPLAY="${DISPLAY:-:1}"
+args=(-force-glcore -logFile "$HOME/unity-editor.log")
+[ -n "${1:-}" ] && args+=(-projectPath "$(realpath "$1")")
+exec "$UNITY_EDITOR" "${args[@]}"

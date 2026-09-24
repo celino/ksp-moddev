@@ -1,0 +1,5 @@
+#!/bin/bash
+# Abre o Unity Hub no desktop virtual, só pra ativar a licença Personal.
+# A licença (~/.local/share/unity3d/Unity/Unity_lic.ulf) fica no volume do home.
+export DISPLAY="${DISPLAY:-:1}"
+exec unityhub --no-sandbox "$@"
