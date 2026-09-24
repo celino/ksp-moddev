@@ -28,7 +28,7 @@ It was built to rescue a real mod: [Surface Experiment Pack](https://github.com/
 whose 2016 asset bundles broke on KSP 1.8+. See [docs/rebuild-old-bundles.md](docs/rebuild-old-bundles.md)
 for how that went. Spoiler: fewer explosions than expected.
 
-<!-- screenshot: docs/screenshot.png -->
+![The Unity editor running in a browser tab, with Surface Experiment Pack's SEP_Window prefab open](docs/screenshot.png)
 
 ---
 
