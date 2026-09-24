@@ -8,6 +8,11 @@ Xvfb :1 -screen 0 "$GEOM" -nolisten tcp &
 for _ in $(seq 50); do [ -e /tmp/.X11-unix/X1 ] && break; sleep 0.1; done
 export DISPLAY=:1
 openbox &
-x11vnc -display :1 -forever -shared -nopw -localhost -quiet -rfbport 5900 &
+if [ -s "$HOME/.vnc/passwd" ]; then
+  auth=(-rfbauth "$HOME/.vnc/passwd")   # VNC_PASSWORD was set
+else
+  auth=(-nopw)                          # fine while the port stays on 127.0.0.1
+fi
+x11vnc -display :1 -forever -shared "${auth[@]}" -localhost -quiet -rfbport 5900 &
 echo "noVNC at http://localhost:6080/vnc.html (right-click the desktop for the menu)"
 exec websockify --web /usr/share/novnc 6080 localhost:5900

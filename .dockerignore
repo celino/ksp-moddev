@@ -1,3 +1,5 @@
 .git
 docs
 *.md
+.env*
+work

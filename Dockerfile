@@ -89,9 +89,11 @@ COPY bin/ /usr/local/bin/
 COPY openbox/menu.xml /etc/xdg/openbox/menu.xml
 RUN chmod +x /usr/local/bin/*
 
-USER ${USER_NAME}
+# Starts as root; moddev-entrypoint remaps modder to PUID/PGID and drops to it.
 WORKDIR /work
-ENV DISPLAY=:1 \
+ENTRYPOINT ["moddev-entrypoint"]
+ENV HOME=/home/${USER_NAME} \
+    DISPLAY=:1 \
     BROWSER=firefox \
     MOZ_DISABLE_CONTENT_SANDBOX=1 \
     MOZ_DISABLE_GMP_SANDBOX=1 \

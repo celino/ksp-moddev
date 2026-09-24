@@ -1,0 +1,37 @@
+#!/bin/bash
+# Container entrypoint: runs as root only long enough to
+#  1. give the "modder" user the UID/GID of whoever owns the mounted files
+#     (PUID/PGID, default 1000), so a prebuilt image works for anyone, and
+#  2. store an optional VNC password (VNC_PASSWORD),
+# then drops to "modder" and runs the command.
+set -euo pipefail
+USER_NAME=modder
+PUID="${PUID:-1000}"
+PGID="${PGID:-1000}"
+
+if [ "$(id -u)" = 0 ]; then
+  if [ "$(id -g "$USER_NAME")" != "$PGID" ]; then
+    groupmod -o -g "$PGID" "$USER_NAME"
+  fi
+  if [ "$(id -u "$USER_NAME")" != "$PUID" ]; then
+    usermod -o -u "$PUID" "$USER_NAME"
+  fi
+  # Only walk the volumes when their owner doesn't match (the home volume
+  # holds Unity's caches and can get large).
+  for d in /home/$USER_NAME /opt/parttools; do
+    if [ -d "$d" ] && [ "$(stat -c %u:%g "$d")" != "$PUID:$PGID" ]; then
+      chown -R "$PUID:$PGID" "$d"
+    fi
+  done
+  if [ -n "${VNC_PASSWORD:-}" ]; then
+    mkdir -p /home/$USER_NAME/.vnc
+    x11vnc -storepasswd "$VNC_PASSWORD" /home/$USER_NAME/.vnc/passwd >/dev/null 2>&1
+    chown -R "$PUID:$PGID" /home/$USER_NAME/.vnc
+    chmod 600 /home/$USER_NAME/.vnc/passwd
+  else
+    rm -f /home/$USER_NAME/.vnc/passwd
+  fi
+  export HOME=/home/$USER_NAME USER=$USER_NAME
+  exec setpriv --reuid="$PUID" --regid="$PGID" --init-groups "$@"
+fi
+exec "$@"

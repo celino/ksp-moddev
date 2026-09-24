@@ -1,14 +1,11 @@
 # ksp-moddev: `docker compose run --rm moddev moddev-selftest` checks the image;
 # `docker compose up -d` starts the virtual desktop (noVNC on 127.0.0.1:6080).
+# Copy .env.example to .env and set KSP_GAME first.
 name: ksp-moddev
 
 services:
   moddev:
-    build:
-      context: .
-      args:
-        USER_UID: ${MODDEV_UID:-1000}
-        USER_GID: ${MODDEV_GID:-1000}
+    build: .
     image: ksp-moddev:2019.4.18f1
     container_name: ksp-moddev
     # Unity binds the license to the machine; a fixed hostname and MAC keep it
@@ -18,14 +15,17 @@ services:
     command: moddev-gui
     shm_size: 2gb
     ports:
-      - "127.0.0.1:6080:6080"     # local only; from elsewhere, use an SSH tunnel
+      - "127.0.0.1:${MODDEV_PORT:-6080}:6080"   # local only; from elsewhere, use an SSH tunnel
     environment:
+      PUID: ${PUID:-1000}                  # owner of your mod repos (id -u)
+      PGID: ${PGID:-1000}                  # (id -g)
+      VNC_PASSWORD: ${VNC_PASSWORD:-}      # optional; empty = no password
       MODDEV_GEOMETRY: ${MODDEV_GEOMETRY:-1920x1080x24}
     volumes:
-      - home:/home/modder                       # Unity license, Hub config, caches
-      - parttools:/opt/parttools                # downloaded PartTools (never baked into the image)
-      - ${KSP_WORK:-/mnt/projects/projects/ksp}:/work
-      - ${KSP_GAME:-${HOME}/.steam/debian-installation/steamapps/common/Kerbal Space Program}:/ksp:ro
+      - home:/home/modder                  # Unity license, Hub config, caches
+      - parttools:/opt/parttools           # downloaded PartTools (never baked into the image)
+      - ${KSP_WORK:-./work}:/work
+      - ${KSP_GAME:?set KSP_GAME in .env to your KSP 1.12 install}:/ksp:ro
 
 volumes:
   home:
