@@ -9,8 +9,11 @@ if [ -s "$ULF" ]; then
   grep -o -e '<StartDate Value="[^"]*"' -e '<StopDate Value="[^"]*"' "$ULF" | head -2
 fi
 for d in "$HOME/.local/share/unity3d/Unity/licenses" "$HOME/.config/unity3d/Unity/licenses"; do
-  if compgen -G "$d/*" >/dev/null; then
-    found=1; echo "entitlement licenses in $d:"; ls -1 "$d" | sed 's/^/  /'
+  # License files sit directly in the folder; the packages/ subfolder is only
+  # the package access list and is created even without a license.
+  files="$(find "$d" -maxdepth 1 -type f -name '*.xml' 2>/dev/null)"
+  if [ -n "$files" ]; then
+    found=1; echo "entitlement licenses in $d:"; echo "$files" | sed 's|.*/|  |'
   fi
 done
 [ $found = 1 ] || { echo "no license activated yet (see docs/license.md)"; exit 1; }
