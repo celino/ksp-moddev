@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- CI: GitHub Actions checks that the image still builds on every push and pull
+  request (nothing is pushed to a registry)
+- README: how this was made, credits and a Sponsor button
+
 ## 1.0.0 (2026-09-24)
 
 First public release. Tested by rebuilding Surface Experiment Pack's 2016

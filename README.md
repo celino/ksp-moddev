@@ -1,5 +1,12 @@
 <h1><img src="docs/images/logo.png" alt="" width="56" align="center"> ksp-moddev</h1>
 
+<p>
+  <img alt="KSP 1.12" src="https://img.shields.io/badge/KSP-1.12-1e6fb8">
+  <img alt="Unity 2019.4.18f1" src="https://img.shields.io/badge/Unity-2019.4.18f1-555">
+  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-555">
+  <img alt="Made with AI assistance, reviewed and tested by a human" src="https://img.shields.io/badge/made%20with-AI%20assistance-8a8a8a">
+</p>
+
 ![A kerbal at a mission control console, a whale carrying Unity and PartTools containers on the main screen, and a "MOAR STRUTS" sticky note](docs/images/banner.jpg)
 
 > *"Unity 2019.4.18f1 installed. No kerbals were harmed. Several were mildly
@@ -134,6 +141,37 @@ Then run `dotnet build -c Release`.
 | Files in `/work` are owned by the wrong user | Set `PUID`/`PGID` in `.env` to the owner of your repos. |
 | The editor is slow | It renders on the CPU (llvmpipe). Fine for UI and asset work, not for admiring shaders. |
 
+## How this was made
+
+Like any respectable space program, this one has a flight director and an intern.
+I'm the flight director. The intern is Claudinho, my AI assistant, who works fast,
+never sleeps and has never once asked for snacks.
+
+1. **Flight plan.** We talk the plan over, and nothing gets built until I approve it.
+2. **Assembly.** The intern builds most of it and runs the automated checks.
+3. **Inspection.** I review every change and test it by hand, on a real KSP install.
+   A few lines I had to write myself, because Claudinho just couldn't get them.
+4. **Repeat** 2 and 3 until every requirement I set is met. Only then do we launch.
+
+Anything that still blows up on the pad is on me. Please report it in the
+[issues](https://github.com/celino/ksp-moddev/issues).
+
+## Credits
+
+- **[GameCI](https://game.ci)**, for the Unity images that let a 2019 editor live
+  happily in a container.
+- **Squad**, for PartTools, and the **[Internet Archive](https://archive.org)**, for
+  catching it on its way out of orbit.
+- **AlbertKermin** and **CobaltWolf**, for
+  [Surface Experiment Pack](https://github.com/CobaltWolf/Surface-Experiment-Pack): the
+  mod whose rescue started all this.
+- **Claudinho**, my AI assistant (Claude, by Anthropic), who wrote most of the
+  Dockerfile and the scripts and only asked once whether the container would go
+  faster with more boosters. He did convince Jeb, though, and it took a while to
+  talk Jeb out of it.
+  Every line was reviewed and tested by Evandro, who is the one responsible for all
+  of it, mistakes included.
+
 ## Licenses
 
 The scripts and Dockerfile in this repo are MIT. The Unity Editor is under
@@ -142,3 +180,8 @@ the base image comes from [GameCI](https://game.ci). PartTools and the KSP DLLs
 belong to Squad/Take-Two and are not redistributed here. This project is not
 affiliated with Squad, Take-Two, Private Division or Unity. Any resemblance to a
 functioning space program is purely coincidental.
+
+---
+
+<sub>Made by Evandro, a.k.a. *Fogueteiro da Holanda* 🇧🇷 🇳🇱 ·
+[GitHub](https://github.com/celino) · [Buy me a coffee](https://buymeacoffee.com/fogueteiro_da_holanda)</sub>
