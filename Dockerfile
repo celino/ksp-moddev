@@ -22,7 +22,7 @@ ARG DOTNET_CHANNEL=8.0
 # Virtual desktop + software GL (llvmpipe), so the editor runs without a GPU.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      ca-certificates curl gnupg git unzip xz-utils sudo less nano \
+      ca-certificates curl gnupg git unzip xz-utils sudo less nano rsync \
       xvfb x11vnc openbox xterm novnc websockify dbus-x11 xdg-utils x11-apps \
       libgl1-mesa-dri libglu1-mesa mesa-utils \
       fonts-dejavu-core \

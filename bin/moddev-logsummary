@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+"""Summarizes a KSP.log (or Player.log): what loaded, what threw, and how often.
+
+Usage: moddev-logsummary [--since HH:MM:SS] [--top N] KSP.log
+       moddev-logsummary --compare A/KSP.log B/KSP.log   (what changed from A to B)
+
+Groups exceptions by type and by the first stack frame that belongs to a mod
+(Unity, Mono and System frames are skipped), groups [ERR] lines by message with
+numbers masked, and lists assemblies that failed to load. The output is
+Markdown, so it reads the same in a terminal, a PR or an AI assistant.
+"""
+import argparse
+import re
+import sys
+from collections import Counter, OrderedDict
+
+STAMP = re.compile(r"^\[(LOG|WRN|ERR|EXC) (\d\d:\d\d:\d\d)\.\d+\] ?(.*)$")
+FRAME = re.compile(r"^(?:\t|\s+at )(.+)$")
+SKIP_FRAME = re.compile(r"^(UnityEngine\.|System\.|Mono\.|\(wrapper|ModuleManager\.UnityLogHandle|"
+                        r"EventData|EventVoid|EventReport|BaseEventDetails)")
+HANDLER = re.compile(r"Exception handling event (\S+) in class (\S+?):(\S+?)(?::|$)")
+LOAD_FAIL = re.compile(r"(ADDON BINDER: Cannot resolve assembly: [^,]+|AssemblyLoader: Exception loading '[^']+'"
+                       r"|Failed to load assembly [^\s]+|ReflectionTypeLoadException)")
+SCENE = re.compile(r"Scene Change : From (\w+) to (\w+)")
+
+
+def mask(text, width=150):
+    text = re.sub(r"moddev-headless\.\w+", "moddev-headless.#", text)  # scratch folder of each run
+    text = re.sub(r"0x[0-9a-fA-F]+|\b[0-9a-f]{16,}\b", "#", text)
+    text = re.sub(r"\d+([.,]\d+)?", "N", text)
+    return text if len(text) <= width else text[: width - 1] + "…"
+
+
+def frame_name(frame):
+    frame = re.sub(r"\s*\(at .*$|\s*\[0x[0-9a-f]+\].*$| in <[0-9a-f]+>:\d+$", "", frame)
+    frame = re.sub(r"\s*\([^()]*\)\s*$", "", frame)
+    return re.sub(r"^\(wrapper [^)]*\)\s*", "", frame).strip()
+
+
+def read_events(lines, since):
+    """Yields (level, time, message, stack frames). Plain Player.log lines have no level/time."""
+    current = None
+    active = since is None
+    for raw in lines:
+        line = raw.rstrip("\n")
+        m = STAMP.match(line)
+        if m:
+            if current:
+                yield current
+            level, time, msg = m.groups()
+            if not active and time >= since:
+                active = True
+            current = (level, time, msg, []) if active else None
+            continue
+        f = FRAME.match(line)
+        if f and current is not None:
+            current[3].append(f.group(1))
+            continue
+        if line and not line.startswith("(Filename:") and active:
+            if current:
+                yield current
+            # Player.log: no prefix; treat exception headers as EXC, the rest as LOG
+            level = "EXC" if re.match(r"^\w+(\.\w+)*Exception\b", line) else (
+                "ERR" if line.startswith("Exception handling event") else "LOG")
+            current = (level, "", line, [])
+    if current:
+        yield current
+
+
+class Summary:
+    def __init__(self):
+        self.exc, self.handlers, self.errs, self.loads = Counter(), Counter(), Counter(), Counter()
+        self.first_seen = {}
+        self.scenes = []
+        self.first_time = self.last_time = ""
+
+    def menu(self):
+        return next((t for t, s in self.scenes if s.endswith("MAINMENU")), None)
+
+    def menu_text(self):
+        menu = self.menu()
+        return "no" if menu is None else ("yes, " + menu).rstrip(", ")
+
+    def exceptions(self):
+        return sum(self.exc.values()) + sum(self.handlers.values())
+
+    def rows(self):
+        """Every counted thing as (kind, description) -> count, for comparing two logs."""
+        rows = Counter()
+        for (etype, where), n in self.exc.items():
+            rows[("exception", f"{etype} in {where or '?'}")] += n
+        for (event, cls, etype, top), n in self.handlers.items():
+            rows[("handler", f"{etype} in {cls} handling {event}, thrown at {top}")] += n
+        for msg, n in self.errs.items():
+            rows[("[ERR]", msg)] += n
+        for msg, n in self.loads.items():
+            rows[("not loaded", msg)] += n
+        return rows
+
+
+def collect(path, since=None):
+    try:
+        lines = open(path, encoding="utf-8", errors="replace")
+    except OSError as e:
+        sys.exit(f"moddev-logsummary: {e}")
+    r = Summary()
+    # KSP logs an exception inside a GameEvents handler twice: the "Exception handling event"
+    # line, then the exception itself (in Player.log after "Uploading Crash Report"). Count it once.
+    after_handler = False
+    for level, time, msg, stack in read_events(lines, since):
+        if time:
+            r.first_time = r.first_time or time
+            r.last_time = time
+        s = SCENE.search(msg)
+        if s:
+            r.scenes.append((time, f"{s.group(1)} → {s.group(2)}"))
+        for key in LOAD_FAIL.findall(msg):
+            r.loads[key] += 1
+        h = HANDLER.search(msg)
+        if h:
+            # Where it was thrown tells a destroyed handler (it fails inside Unity) from a live one
+            key = (h.group(1), h.group(2), h.group(3), frame_name(stack[0]) if stack else "?")
+            r.handlers[key] += 1
+            r.first_seen.setdefault(("h",) + key, time)
+            after_handler = True
+            continue
+        if after_handler and msg.startswith("Uploading Crash Report"):
+            continue
+        if after_handler and level == "EXC":
+            after_handler = False
+            continue
+        after_handler = False
+        if level == "EXC":
+            etype = msg.split(":", 1)[0].strip()
+            where = next((frame_name(f) for f in stack if not SKIP_FRAME.match(f.strip())), "")
+            if not where and stack:
+                where = frame_name(stack[0])
+            key = (etype, where)
+            r.exc[key] += 1
+            r.first_seen.setdefault(("e",) + key, time)
+        elif level == "ERR":
+            key = mask(msg)
+            r.errs[key] += 1
+            r.first_seen.setdefault(("r", key), time)
+    return r
+
+
+def table(title, header, rows):
+    print(f"\n## {title}")
+    if not rows:
+        print("\nnone")
+        return
+    print("\n| " + " | ".join(header) + " |\n|" + "---|" * len(header))
+    for row in rows:
+        print("| " + " | ".join(str(c).replace("|", "\\|") for c in row) + " |")
+
+
+def report(path, r, since, top):
+    print(f"# Log summary: {path}")
+    span = f"{r.first_time}–{r.last_time}" if r.first_time else "no timestamps (Player.log?)"
+    print(f"\n- time span: {span}" + (f" (from {since})" if since else ""))
+    print(f"- reached main menu: {r.menu_text()}")
+    if r.scenes:
+        trail = OrderedDict()
+        for _, s in r.scenes:
+            trail[s] = trail.get(s, 0) + 1
+        print("- scene changes: " + ", ".join(f"{s} ×{n}" if n > 1 else s for s, n in trail.items()))
+    print(f"- exceptions: {r.exceptions()} "
+          f"({len(r.exc) + len(r.handlers)} distinct); [ERR] lines: {sum(r.errs.values())} ({len(r.errs)} distinct)")
+
+    if r.first_time and r.menu() and not r.exceptions() and not r.errs and sys.stderr.isatty():
+        print("Nominal. Jeb is bored.", file=sys.stderr)  # a modded KSP.log with nothing to report
+
+    table("Exceptions by type and first mod frame", ["count", "first", "exception", "where"],
+          [(n, r.first_seen[("e",) + k], k[0], k[1] or "?") for k, n in r.exc.most_common(top)])
+    table("Exceptions inside GameEvents handlers", ["count", "first", "event", "handler class", "exception", "thrown at"],
+          [(n, r.first_seen[("h",) + k], k[0], k[1], k[2], k[3]) for k, n in r.handlers.most_common(top)])
+    table("[ERR] lines (numbers masked)", ["count", "first", "message"],
+          [(n, r.first_seen[("r", k)], k) for k, n in r.errs.most_common(top)])
+    table("Assemblies not found or not loaded (often just an optional dependency)", ["count", "message"],
+          [(n, k) for k, n in r.loads.most_common(top)])
+
+
+def compare(path_a, path_b, since, top, show_all):
+    a, b = collect(path_a, since), collect(path_b, since)
+    print(f"# Log comparison\n\n- A: {path_a}\n- B: {path_b}\n")
+    print("| | A | B |\n|---|---|---|")
+    print(f"| reached main menu | {a.menu_text()} | {b.menu_text()} |")
+    print(f"| exceptions | {a.exceptions()} | {b.exceptions()} |")
+    print(f"| [ERR] lines | {sum(a.errs.values())} | {sum(b.errs.values())} |")
+    print(f"| assemblies not loaded | {sum(a.loads.values())} | {sum(b.loads.values())} |")
+    ra, rb = a.rows(), b.rows()
+    changed = [(ra[k], rb[k], k) for k in set(ra) | set(rb) if ra[k] != rb[k]]
+    # Errors logged every frame differ a little between any two runs, only because one ran a
+    # few seconds longer. Set those apart unless asked.
+    drift = [] if show_all else [c for c in changed if c[0] and c[1] and abs(c[1] - c[0]) < 0.15 * max(c[0], c[1])]
+    changed = [c for c in changed if c not in drift]
+    # Exceptions first, then by size of the change
+    order = {"exception": 0, "handler": 0, "not loaded": 1, "[ERR]": 2}
+    changed.sort(key=lambda c: (order[c[2][0]], -abs(c[1] - c[0]), c[2][1]))
+    gone = sum(1 for x, y, _ in changed if y == 0)
+    new = sum(1 for x, y, _ in changed if x == 0)
+    print(f"\n{len(changed)} counts differ: {gone} only in A, {new} only in B, "
+          f"{len(changed) - gone - new} in both with a different count.")
+    table("What changed (A → B)", ["A", "B", "kind", "what"],
+          [(x, y, kind, what) for x, y, (kind, what) in changed[:top]])
+    if len(changed) > top:
+        print(f"\n…and {len(changed) - top} more (raise --top).")
+    if drift:
+        print(f"\n{len(drift)} more differ by less than 15% in both runs, usually errors logged every frame "
+              "in a run that lasted a little longer (--all lists them).")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("log", nargs="+", help="a log, or two with --compare")
+    ap.add_argument("--since", help="only from this time on (HH:MM:SS, as in the log)")
+    ap.add_argument("--top", type=int, default=15, help="rows per table (default 15)")
+    ap.add_argument("--compare", action="store_true", help="compare two logs: what changed from the first to the second")
+    ap.add_argument("--all", action="store_true", help="with --compare, also list counts that differ by less than 15%%")
+    a = ap.parse_args()
+    if a.compare:
+        if len(a.log) != 2:
+            ap.error("--compare takes exactly two logs")
+        compare(a.log[0], a.log[1], a.since, a.top, a.all)
+    elif len(a.log) != 1:
+        ap.error("one log at a time (or --compare A B)")
+    else:
+        report(a.log[0], collect(a.log[0], a.since), a.since, a.top)
+
+
+if __name__ == "__main__":
+    main()

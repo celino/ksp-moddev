@@ -14,6 +14,7 @@ check "xvfb/openbox/vnc"  bash -c 'command -v Xvfb openbox x11vnc websockify >/d
 check "novnc"             bash -c 'test -f /usr/share/novnc/vnc.html && echo /usr/share/novnc'
 check "gl (llvmpipe)"     bash -c 'xvfb-run -a glxinfo -B | grep -m1 "OpenGL renderer"'
 check "parttools"         fetch-parttools
+check "headless tools"    bash -c 'moddev-headless --help >/dev/null && printf "KSP.log\n" >/tmp/st.log && moddev-logsummary /tmp/st.log | grep -m1 "Log summary"'
 check "user uid"          bash -c 'echo "$(id -un) $(id -u):$(id -g)"'
 if [ -d "${KSP_DIR:-/ksp}/KSP_Data/Managed" ]; then
   check "KSP dlls (/ksp)" bash -c 'ls "$KSP_DIR/KSP_Data/Managed/Assembly-CSharp.dll"'

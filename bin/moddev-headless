@@ -1,0 +1,211 @@
+#!/bin/bash
+# Starts KSP without a screen (Xvfb), waits until the log shows a given line (by default,
+# the main menu), stops the game and writes the log plus a moddev-logsummary.
+#
+# The install is never modified, and it can stay mounted read-only. It is synced once into
+# a cache ($MODDEV_GAME_CACHE, by default ~/.cache/moddev-game; slow the first time, then
+# only what changed), and each run gets a scratch tree of hardlinks to that cache, which
+# takes seconds. KSP opens its files read-write, so plain symlinks to a read-only install
+# do not work. Your changes (--add, --put, --remove) go into the scratch tree, so comparing
+# two builds of a mod is two runs with different --put. saves/ is left out (see --save).
+#
+#   moddev-headless --add /work/MyMod/GameData/MyMod
+#   moddev-headless --put out/MyMod.dll=GameData/MyMod/Plugins/MyMod.dll --out runs/new
+#   moddev-headless --save mysave --until '\[MyProbe\] done' --timeout 1800
+#
+# Exit status: 0 the line showed up, 2 timeout, 3 the game quit before it, 1 usage/setup.
+set -euo pipefail
+
+usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; cat <<'EOF'
+
+Options:
+  --game DIR       KSP 1.12 install (default: $KSP_DIR, or /ksp)
+  --add SRC        copy a file or folder into GameData/ (repeatable)
+  --put SRC=DEST   copy SRC to DEST, a path inside the game folder, replacing it (repeatable)
+  --remove DEST    delete DEST from the scratch tree, after the --add/--put (repeatable)
+  --save NAME      copy saves/NAME from the install into the scratch tree (repeatable)
+  --until REGEX    stop when KSP.log matches (default: main menu ready)
+  --settle SEC     keep running this long after the match (default 5)
+  --timeout SEC    give up after this long (default 900)
+  --out DIR        where KSP.log, Player.log and summary.md go (default ./headless-<time>)
+  --keep           keep the scratch tree (its path is printed)
+  --prepare-only   sync the cache, build the scratch tree and stop (implies --keep)
+  --               anything after this is passed to KSP
+EOF
+}
+
+game="${KSP_DIR:-/ksp}"; until_re='OnSceneLoadedGUIReady: scene MAINMENU'
+settle=5; timeout=900; out=""; keep=no; prepare_only=no
+adds=(); puts=(); removes=(); saves=(); ksp_args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --game) game="$2"; shift 2 ;;
+    --add) adds+=("$2"); shift 2 ;;
+    --put) puts+=("$2"); shift 2 ;;
+    --remove) removes+=("$2"); shift 2 ;;
+    --save) saves+=("$2"); shift 2 ;;
+    --until) until_re="$2"; shift 2 ;;
+    --settle) settle="$2"; shift 2 ;;
+    --timeout) timeout="$2"; shift 2 ;;
+    --out) out="$2"; shift 2 ;;
+    --keep) keep=yes; shift ;;
+    --prepare-only) prepare_only=yes; keep=yes; shift ;;
+    -h|--help) usage; exit 0 ;;
+    --) shift; ksp_args=("$@"); break ;;
+    *) echo "moddev-headless: unknown option $1 (see --help)" >&2; exit 1 ;;
+  esac
+done
+
+game="$(cd "$game" 2>/dev/null && pwd)" || { echo "moddev-headless: no KSP install at $game" >&2; exit 1; }
+[ -x "$game/KSP.x86_64" ] || { echo "moddev-headless: $game/KSP.x86_64 not found (Linux install needed)" >&2; exit 1; }
+out="${out:-headless-$(date +%Y%m%d-%H%M%S)}"
+mkdir -p "$out"; out="$(cd "$out" && pwd)"
+cache="${MODDEV_GAME_CACHE:-${HOME:-/tmp}/.cache/moddev-game}"
+mkdir -p "$cache"
+scratch="$(mktemp -d "$(dirname "$cache")/moddev-headless.XXXXXX")"
+tree="$scratch/game"
+stamp="$scratch/started"
+pid=""
+
+log() { printf '[moddev-headless] %s\n' "$*"; }
+
+# What KSP is doing, for the progress line while it loads
+progress() {
+  local f="$tree/KSP.log"
+  [ -f "$f" ] || { echo "starting"; return; }
+  echo "assemblies $(grep -ac 'AssemblyLoader: Loading assembly' "$f"), configs $(grep -ac '^\[LOG [0-9:.]*\] Config(' "$f"), parts $(grep -ac 'PartLoader: Compiling Part' "$f")"
+}
+# Every loading screen needs these
+quips=(
+  "Convincing Jeb to read the manual"
+  "Counting the struts. Adding more"
+  "Asking Wernher whether that was supposed to happen"
+  "Hiding the snacks from Bill"
+  "Recalibrating the navball (it was upside down)"
+  "Teaching the Kraken some manners"
+  "Assuring Bob the capsule is perfectly safe"
+  "Checking that the parachutes are, in fact, parachutes"
+  "Filing the paperwork for the last explosion"
+  "Waiting for Gene to finish his coffee"
+  "Reattaching the part that fell off"
+  "Calculating the delta-v twice and getting two answers"
+  "Moving the center of mass back where it belongs"
+  "Waking up the kerbal asleep in the VAB"
+  "Explaining staging to the interns"
+  "Putting the decoupler on the right side this time"
+)
+
+cleanup() {
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    kill -TERM -- "-$pid" 2>/dev/null || true; sleep 2; kill -KILL -- "-$pid" 2>/dev/null || true
+  fi
+  # A file still hardlinked to the cache but written during the run dirtied the cache:
+  # drop it there, and the next sync copies it again from the install.
+  if [ -f "$stamp" ] && [ -d "$tree" ]; then
+    find "$tree" -type f -links +1 -newer "$stamp" -printf '%P\n' 2>/dev/null | while IFS= read -r rel; do
+      log "written during the run, dropped from the cache: $rel"; rm -f "$cache/$rel"
+    done
+  fi
+  if [ "$keep" = yes ]; then echo "scratch tree kept: $tree"; else rm -rf "$scratch"; fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
+# Mirrors the install into the cache: symlinked mods are copied as files, and saves, logs
+# and screenshots stay out.
+sync_cache() {
+  local excl=(saves Logs Screenshots KSP.log)
+  if command -v rsync >/dev/null; then
+    local rc=0
+    rsync -a --delete --copy-links "${excl[@]/#/--exclude=/}" "$game/" "$cache/" || rc=$?
+    # 23: some files could not be copied, usually a symlinked mod whose target is not mounted
+    [ $rc = 23 ] && { log "some files were not copied (see above); a symlink pointing outside the install needs its target mounted at the same path"; rc=0; }
+    return $rc
+  fi
+  local entry name skip
+  for entry in "$game"/* "$game"/.[!.]*; do
+    [ -e "$entry" ] || continue
+    name="${entry##*/}"; skip=no
+    for e in "${excl[@]}"; do [ "$name" = "$e" ] && skip=yes; done
+    [ $skip = yes ] || cp -aLu "$entry" "$cache/"
+  done
+  # Files that are gone from the install go from the cache too.
+  comm -13 <(cd "$game" && find -L . -type f | sort) <(cd "$cache" && find . -type f | sort) \
+    | { grep -vE '^\./(saves|Logs|Screenshots)/' || true; } | (cd "$cache" && xargs -r -d '\n' rm -f)
+}
+
+# Replaces a hardlink in the tree with its own copy, so the game can write to it.
+realize() { local rel="$1"; [ -e "$tree/$rel" ] || return 0; cp -a --remove-destination "$cache/$rel" "$tree/$rel.tmp" && mv -f "$tree/$rel.tmp" "$tree/$rel"; }
+
+log "syncing $game into the cache $cache"
+t0=$(date +%s); sync_cache; log "cache in sync ($(( $(date +%s) - t0 ))s, $(du -sh "$cache" | cut -f1))"
+log "building the scratch tree"
+mkdir -p "$tree"
+if ! cp -al "$cache/." "$tree/" 2>/dev/null; then
+  log "hardlinks not possible here (cache and scratch on different filesystems); copying instead"
+  rm -rf "$tree"; cp -a "$cache/." "$tree/"
+fi
+# Files KSP rewrites in place on the way to the main menu
+for f in settings.cfg PartDatabase.cfg Physics.cfg; do realize "$f"; done
+for f in "$tree"/GameData/ModuleManager.*; do
+  case "$f" in *.dll) ;; *) [ -f "$f" ] && realize "GameData/${f##*/}" ;; esac
+done
+while IFS= read -r d; do
+  while IFS= read -r f; do realize "${f#"$tree"/}"; done < <(find "$d" -type f)
+done < <(find "$tree/GameData" -type d -name PluginData -prune)
+mkdir -p "$tree/saves"
+for s in "${saves[@]}"; do
+  [ -d "$game/saves/$s" ] || { echo "moddev-headless: no save $s" >&2; exit 1; }
+  cp -aL "$game/saves/$s" "$tree/saves/"
+done
+for a in "${adds[@]}"; do puts+=("$a=GameData/$(basename "$a")"); done
+for p in "${puts[@]}"; do
+  src="${p%%=*}"; dest="${p#*=}"
+  [ -e "$src" ] || { echo "moddev-headless: $src not found" >&2; exit 1; }
+  log "put $src -> $dest"
+  rm -rf "${tree:?}/$dest"; mkdir -p "$(dirname "$tree/$dest")"; cp -aL "$src" "$tree/$dest"
+done
+for r in "${removes[@]}"; do log "remove $r"; rm -rf "${tree:?}/$r"; done
+
+if [ $prepare_only = yes ]; then
+  log "scratch tree ready: $(find "$tree" -type f -links +1 | wc -l) files hardlinked to the cache, $(find "$tree" -type f -links 1 | wc -l) own copies"
+  exit 0
+fi
+
+touch "$stamp"
+log "starting KSP (timeout ${timeout}s, waiting for: $until_re)"
+start=$(date +%s)
+( cd "$tree" && exec setsid xvfb-run -a -s "-screen 0 1280x720x24" ./KSP.x86_64 -force-glcore "${ksp_args[@]}" \
+    >"$out/stdout.txt" 2>&1 ) &
+pid=$!
+status=2
+next=60
+while [ $(( $(date +%s) - start )) -lt "$timeout" ]; do
+  if grep -aqE "$until_re" "$tree/KSP.log" 2>/dev/null; then status=0; break; fi
+  if ! kill -0 "$pid" 2>/dev/null; then status=3; break; fi
+  sleep 3
+  t=$(( $(date +%s) - start ))
+  if [ $t -ge $next ]; then
+    next=$(( next + 60 ))
+    log "$(( t / 60 ))m$(printf %02d $(( t % 60 )))s: $(progress)"
+    [ $(( RANDOM % 3 )) = 0 ] && log "${quips[RANDOM % ${#quips[@]}]}..."
+  fi
+done
+[ $status = 0 ] && sleep "$settle"
+elapsed=$(( $(date +%s) - start ))
+
+cp "$tree/KSP.log" "$out/KSP.log" 2>/dev/null || true
+player="${HOME:-/root}/.config/unity3d/Squad/Kerbal Space Program/Player.log"
+[ -f "$player" ] && cp "$player" "$out/Player.log" || true
+case $status in
+  0) log "matched after ${elapsed}s" ;;
+  2) log "timeout after ${elapsed}s: '$until_re' never showed up" ;;
+  3) log "KSP quit after ${elapsed}s before '$until_re' (see $out/stdout.txt)" ;;
+esac
+if [ -f "$out/KSP.log" ]; then
+  moddev-logsummary "$out/KSP.log" >"$out/summary.md" \
+    || "$(dirname "$0")/moddev-logsummary" "$out/KSP.log" >"$out/summary.md" || true
+  sed -n '1,8p' "$out/summary.md"
+fi
+log "log and summary in $out"
+exit $status

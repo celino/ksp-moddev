@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `moddev-headless`: runs KSP to the main menu (or to any log line) on a virtual
+  screen, from a hardlinked scratch copy of a cached mirror of the install, and
+  summarizes the log (the image now includes rsync for the mirror)
+- `moddev-logsummary`: exceptions grouped by type and by the mod that threw them,
+  GameEvents handler exceptions, repeated `[ERR]` lines, assemblies that failed to load;
+  `--compare A B` lists what changed between two logs
+- `docs/rebuild-old-bundles.md` tests the bundle with `moddev-headless`
 - CI: GitHub Actions checks that the image still builds on every push and pull
   request (nothing is pushed to a registry)
 - README: how this was made, credits and a Sponsor button

@@ -85,16 +85,13 @@ only scans for `*.ksp`.
 
 ## 5. Test without leaving your chair
 
-KSP doesn't need a GPU to reach the main menu, and the image can run it.
-**Back up `settings.cfg` and `KSP.log` first**, since the run overwrites them.
-The temporary `HOME` keeps Unity's player prefs for this run out of the container's home volume:
+KSP doesn't need a GPU to reach the main menu, and the image can run it on a copy
+of your install, with the new bundle in place:
 
 ```sh
-docker run --rm --shm-size 2g -e PUID=$(id -u) -e PGID=$(id -g) -v "$KSP_GAME":/game \
-  ksp-moddev:2019.4.18f1 bash -c 'export HOME=/tmp/h; mkdir -p $HOME; cd /game && \
-  timeout 1800 xvfb-run -a -s "-screen 0 1280x720x24" ./KSP.x86_64 -force-glcore'
+moddev-headless --put AssetBundles/sep_kspedia=GameData/SEP/sep_kspedia.ksp --out runs/bundle
 ```
 
-Watch `KSP.log`. Success looks like `AssetLoader: Loaded mod bundle '<name>'` and
+Read `runs/bundle/KSP.log`. Success looks like `AssetLoader: Loaded mod bundle '<name>'` and
 no *"can't be loaded"* lines. Loading a save is possible too, but checking what a
 window looks like still takes a human.

@@ -82,6 +82,8 @@ docker compose exec -u modder moddev bash
 | `moddev-license` | shows whether a license is activated |
 | `fetch-parttools` | downloads PartTools into `/opt/parttools` |
 | `moddev-selftest` | checks the image |
+| `moddev-headless` | runs KSP to the main menu without a screen and summarizes the log |
+| `moddev-logsummary <log>` | groups the exceptions and errors in a `KSP.log` or `Player.log` |
 
 ## Configuration (`.env`)
 
@@ -129,10 +131,33 @@ Use an SDK-style project targeting `net48` that references the game's DLLs in `/
 
 Then run `dotnet build -c Release`.
 
+## Testing a mod without opening the game
+
+`moddev-headless` starts KSP on a virtual screen, waits for the main menu (or any
+line you choose in `KSP.log`), stops the game and writes a summary of the log. Your
+install is never modified: it is mirrored once into a cache in the `home` volume
+(as big as your install; later runs only copy what changed), and each run gets a
+scratch copy made of hardlinks to that cache. Your changes only go into that copy.
+
+```sh
+# Does my mod load cleanly?
+moddev-headless --add /work/MyMod/GameData/MyMod --out runs/mymod
+
+# Stop at your own log line instead of the main menu, with a save loaded by your test addon
+moddev-headless --save mytest --add /work/MyProbe --until '\[MyProbe\] done' --timeout 1800
+```
+
+`moddev-logsummary KSP.log` works on any log, `Player.log` from your own game
+included: exceptions grouped by type and by the mod that threw them, exceptions
+inside GameEvents handlers, repeated `[ERR]` lines and assemblies that failed to
+load. Add `--since HH:MM:SS` to read only from a given moment. Loading to the main
+menu takes a few minutes with a large mod list, since everything renders on the CPU.
+
 ## Troubleshooting
 
 | symptom | cause / fix |
 |---|---|
+| `moddev-headless`: "symlink has no referent" | a mod in your install is a symlink to a folder outside it. Mount that folder at the same path, e.g. `-v /path/to/mods:/path/to/mods:ro` |
 | KSP log: *"The AssetBundle '…' can't be loaded because it was not built with the right version or build target"* | The bundle was built with an older Unity. Rebuild it here. A bundle built for `StandaloneWindows64` also loads on Linux (tested on KSP 1.12.5). |
 | The editor shows only an **"Install Unity Hub"** window | No valid license. See [docs/license.md](docs/license.md). |
 | The Hub doesn't react after signing in | The `unityhub://` callback got lost. See the fallback in [docs/license.md](docs/license.md). |
