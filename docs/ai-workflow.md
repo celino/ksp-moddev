@@ -5,7 +5,7 @@ This is how a real fix went, with the numbers from the logs. The mod is
 the assistant is Claudinho (Claude, by Anthropic), and the human is me. It shows
 what the tools in this image are for, and where a person still has to be in the loop.
 
-<!-- TODO: link the pull request once it is open -->
+The pull request: [RoverScience-Continued#12](https://github.com/linuxgurugamer/RoverScience-Continued/pull/12).
 
 ## The symptom
 
