@@ -3,3 +3,7 @@ docs
 *.md
 .env*
 work
+# Shipped in the image for AI assistants (/opt/ksp-moddev)
+!AGENTS.md
+!docs/examples
+!docs/examples/**

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## Unreleased: 1.1.0 "Headless Kerbal"
 
 - `moddev-headless`: runs KSP to the main menu (or to any log line) on a virtual
   screen, from a hardlinked scratch copy of a cached mirror of the install, and
@@ -12,6 +12,11 @@
   and the comparison of their logs
 - `moddev-csproj`: writes a `net48` SDK-style project from a mod's old Visual Studio
   project, with references found in your game, so it builds with `dotnet build`
+- `moddev-checklist`: turns step-by-step instructions written in Markdown into a
+  page to tick off (ok, odd, broken, skipped, plus a note) and copy back
+- `AGENTS.md`, a Claude Code skill and `docs/ai-workflow.md`: how an AI assistant
+  should use these tools, with one real fix as the example; `templates/probe/`
+  for test-only addons. The image carries them in `/opt/ksp-moddev/`
 - `docs/rebuild-old-bundles.md` tests the bundle with `moddev-headless`
 - CI: GitHub Actions checks that the image still builds on every push and pull
   request (nothing is pushed to a registry)

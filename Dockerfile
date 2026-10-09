@@ -86,6 +86,10 @@ RUN existing="$(getent passwd ${USER_UID} | cut -d: -f1)"; \
 RUN [ -s /etc/machine-id ] || dbus-uuidgen > /etc/machine-id
 
 COPY bin/ /usr/local/bin/
+# For AI assistants working inside the container: the guide and the templates it points at
+COPY AGENTS.md /opt/ksp-moddev/
+COPY templates/ /opt/ksp-moddev/templates/
+COPY docs/examples/ /opt/ksp-moddev/examples/
 COPY openbox/menu.xml /etc/xdg/openbox/menu.xml
 RUN chmod +x /usr/local/bin/*
 

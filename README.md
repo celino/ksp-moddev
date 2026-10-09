@@ -86,6 +86,7 @@ docker compose exec -u modder moddev bash
 | `moddev-logsummary <log>` | groups the exceptions and errors in a `KSP.log` or `Player.log` |
 | `moddev-ab` | runs the game twice, with and without your change, and compares the logs |
 | `moddev-csproj <x.csproj>` | makes a mod's old Visual Studio project build here |
+| `moddev-checklist <steps.md>` | turns written steps into a page to tick off while you test |
 
 ## Configuration (`.env`)
 
@@ -182,6 +183,27 @@ included: exceptions grouped by type and by the mod that threw them, exceptions
 inside GameEvents handlers, repeated `[ERR]` lines and assemblies that failed to
 load. Add `--since HH:MM:SS` to read only from a given moment. Loading to the main
 menu takes a few minutes with a large mod list, since everything renders on the CPU.
+
+## Working with an AI assistant
+
+Most of these tools were made so an AI coding assistant can do the tedious part of
+fixing a mod (reading a 50 MB log, building someone else's project, running the
+game twice to compare) while you keep the parts that need a person: deciding,
+reviewing, and playing. [AGENTS.md](AGENTS.md) tells an assistant how to use them
+and what not to do. The short version: **you decide, and you are responsible for
+what ships.** The assistant never commits without your explicit approval of each
+commit, every feature or fix gets a manual test by you before it is committed, it
+never touches your install, and it never drives the Unity Hub.
+
+Claude Code users get a ready skill in `.claude/skills/ksp-mod-fix/`.
+[docs/ai-workflow.md](docs/ai-workflow.md) follows one real fix from the first log
+to the before/after numbers, mistakes included.
+
+For what only you can do, in the Unity editor or in the game, the assistant writes
+the steps and `moddev-checklist` turns them into a page you tick off, from your phone
+if you like. Each step says what to do and why; you mark it ok, odd, broken or
+skipped, add a note, and paste the results back. Examples are in
+[docs/examples/](docs/examples/).
 
 ## Troubleshooting
 

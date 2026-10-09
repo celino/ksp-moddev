@@ -1,0 +1,268 @@
+#!/usr/bin/env python3
+"""Turns a step-by-step guide written in Markdown into a checklist page.
+
+Usage: moddev-checklist steps.md [-o checklist.html]
+
+Some things an AI assistant should not do for you: click through the Unity
+editor (Unity's terms), or play the game to see whether a fix works. It can
+still write the steps. Write them in Markdown, one "## " heading per step:
+
+    # Test: RoverScience after the ROC fix
+    Load the "rover-test" save. Each step says what to do and why.
+
+    ## Land the rover twice
+    Drive off the ramp and back. **Why:** each landing fires onLand.
+    > If the game was already running, restart it first.
+
+The page opens in any browser, also from a phone. For each step you mark ok,
+odd, broken or skipped and add a note; your marks stay in that browser. "Copy
+results" puts them on the clipboard as plain text, to paste back to the AI.
+Lines starting with "> " become a warning box; `code`, **bold**, - lists and
+[links](https://...) work. The page has no network access and needs nothing else.
+"""
+import argparse
+import hashlib
+import html
+import json
+import re
+import sys
+from pathlib import Path
+
+
+# "**Why:**" (or "**Por quê:**", "**Por qué:**", "**Warum:**"...) opens a quieter paragraph
+WHY = re.compile(r"^\*\*(Why|Por qu[êé]|Pourquoi|Warum|Waarom|Perch[ée])\??:\*\*", re.I)
+
+
+def inline(text):
+    text = html.escape(text, quote=False)
+    text = re.sub(r"&lt;(https?://[^\s&]+)&gt;", r"[\1](\1)", text)
+    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
+    text = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", text)
+    text = re.sub(r"(?<![\w*])\*([^*\n]+)\*(?![\w*])", r"<em>\1</em>", text)
+    text = re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)",
+                  lambda m: f'<a href="{html.escape(m.group(2))}" target="_blank" rel="noopener">{m.group(1)}</a>', text)
+    return text
+
+
+def block(lines):
+    """A small subset of Markdown: paragraphs, - lists, > warnings, ``` code."""
+    out, para, items, warn, code = [], [], [], [], None
+
+    def flush():
+        nonlocal para, items, warn
+        if para:
+            why = bool(WHY.match(para[0]))
+            out.append(('<p class="why">' if why else "<p>") + inline(" ".join(para)) + "</p>")
+        if items:
+            out.append("<ul>" + "".join(f"<li>{inline(i)}</li>" for i in items) + "</ul>")
+        if warn:
+            out.append('<p class="warn">' + inline(" ".join(warn)) + "</p>")
+        para, items, warn = [], [], []
+
+    for line in lines:
+        if code is not None:
+            if line.strip().startswith("```"):
+                out.append("<pre>" + html.escape("\n".join(code)) + "</pre>")
+                code = None
+            else:
+                code.append(line)
+            continue
+        s = line.strip()
+        if s.startswith("```"):
+            flush()
+            code = []
+        elif not s:
+            flush()
+        elif re.match(r"^[-*] ", s):
+            if para or warn:
+                flush()
+            items.append(s[2:])
+        elif s.startswith(">"):
+            if para or items:
+                flush()
+            warn.append(s.lstrip("> "))
+        elif items and line.startswith(("  ", "\t")):
+            items[-1] += " " + s
+        else:
+            # "**Why:**" opens its own paragraph, shown a little quieter
+            if items or warn or (para and WHY.match(s)):
+                flush()
+            para.append(s)
+    if code is not None:
+        out.append("<pre>" + html.escape("\n".join(code)) + "</pre>")
+    flush()
+    return "\n".join(out)
+
+
+def parse(text):
+    title, intro, steps = "Checklist", [], []
+    for line in text.splitlines():
+        if line.startswith("# ") and not steps and title == "Checklist":
+            title = line[2:].strip()
+        elif line.startswith("## "):
+            steps.append([line[3:].strip(), []])
+        elif steps:
+            steps[-1][1].append(line)
+        else:
+            intro.append(line)
+    return title, block(intro), [{"title": t, "body": block(b)} for t, b in steps]
+
+
+PAGE = r"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__TITLE__</title>
+<style>
+:root { --bg:#f6f7f9; --card:#fff; --fg:#1b1f24; --muted:#5d6672; --line:#d9dee5; --accent:#1e6fb8;
+  --ok:#2e7d32; --odd:#b26a00; --broken:#c62828; --skip:#6b7280; --warnbg:#fff4e0; color-scheme: light }
+@media (prefers-color-scheme: dark) { :root { --bg:#14171b; --card:#1d2127; --fg:#e6e9ee; --muted:#9aa4b1;
+  --line:#313844; --accent:#6aaef0; --ok:#66bb6a; --odd:#ffb74d; --broken:#ef5350; --skip:#9ca3af;
+  --warnbg:#3a2c12; color-scheme: dark } }
+* { box-sizing: border-box }
+body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif }
+main { max-width: 46rem; margin: 0 auto; padding: 1.25rem 1rem 4rem }
+h1 { font-size: 1.4rem; margin: 0 0 .5rem; text-wrap: balance }
+.intro { color: var(--muted) }
+.bar { position: sticky; top: 0; background: var(--bg); padding: .6rem 0; display: flex; gap: .5rem;
+  align-items: center; flex-wrap: wrap; border-bottom: 1px solid var(--line); z-index: 1 }
+.count { flex: 1; color: var(--muted); font-variant-numeric: tabular-nums }
+ol { list-style: none; padding: 0; margin: 1rem 0; display: grid; gap: .75rem; counter-reset: step }
+li.step { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--line);
+  border-radius: 8px; padding: .8rem 1rem; counter-increment: step }
+li.step[data-s=ok] { border-left-color: var(--ok) } li.step[data-s=odd] { border-left-color: var(--odd) }
+li.step[data-s=broken] { border-left-color: var(--broken) } li.step[data-s=skipped] { border-left-color: var(--skip) }
+li.step h2 { font-size: 1.05rem; margin: 0 0 .3rem }
+li.step h2::before { content: counter(step) ". "; color: var(--muted) }
+li.step ul { padding-left: 1.2rem; margin: .4rem 0 }
+li.step p { margin: .4rem 0 }
+code, pre { font: .9em ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg); border-radius: 4px }
+code { padding: .05em .3em } pre { padding: .6rem; overflow-x: auto }
+a { color: var(--accent) }
+.why { color: var(--muted) }
+.warn { background: var(--warnbg); border-radius: 6px; padding: .4rem .6rem }
+.marks { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .6rem }
+button { font: inherit; font-size: .9rem; padding: .35rem .8rem; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--card); color: var(--fg); cursor: pointer }
+.marks button[aria-pressed=true][data-v=ok] { background: var(--ok); border-color: var(--ok); color: #fff }
+.marks button[aria-pressed=true][data-v=odd] { background: var(--odd); border-color: var(--odd); color: #fff }
+.marks button[aria-pressed=true][data-v=broken] { background: var(--broken); border-color: var(--broken); color: #fff }
+.marks button[aria-pressed=true][data-v=skipped] { background: var(--skip); border-color: var(--skip); color: #fff }
+textarea { width: 100%; margin-top: .5rem; font: inherit; font-size: .95rem; padding: .4rem .5rem; min-height: 2.4rem;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); resize: vertical }
+.primary { background: var(--accent); border-color: var(--accent); color: #fff }
+#out { display: none; width: 100%; min-height: 10rem; margin-top: .5rem }
+footer { color: var(--muted); font-size: .85rem; margin-top: 2rem }
+</style>
+</head>
+<body>
+<main>
+<h1>__TITLE__</h1>
+<div class="intro">__INTRO__</div>
+<div class="bar"><span class="count" id="count"></span>
+<button class="primary" id="copy">Copy results</button><button id="reset">Clear marks</button></div>
+<textarea id="out" readonly></textarea>
+<ol id="steps"></ol>
+<footer>Made with moddev-checklist. Your marks are saved in this browser only.</footer>
+</main>
+<script type="application/json" id="data">__DATA__</script>
+<script>
+const data = JSON.parse(document.getElementById("data").textContent);
+const key = "moddev-checklist:" + data.id;
+const LABELS = { ok: "ok", odd: "odd", broken: "broken", skipped: "skipped" };
+let state = {};
+try { state = JSON.parse(localStorage.getItem(key) || "{}"); } catch (e) { state = {}; }
+const save = () => { try { localStorage.setItem(key, JSON.stringify(state)); } catch (e) {} };
+const list = document.getElementById("steps");
+
+function count() {
+  const done = data.steps.filter((_, i) => state[i] && state[i].s).length;
+  document.getElementById("count").textContent = done + " of " + data.steps.length + " marked";
+}
+
+data.steps.forEach((step, i) => {
+  const li = document.createElement("li");
+  li.className = "step";
+  const st = state[i] || {};
+  if (st.s) li.dataset.s = st.s;
+  li.innerHTML = "<h2></h2>" + step.body + '<div class="marks"></div><textarea placeholder="Note (what you saw, the time on the clock, a screenshot name)"></textarea>';
+  li.querySelector("h2").textContent = step.title;
+  const marks = li.querySelector(".marks");
+  for (const v of Object.keys(LABELS)) {
+    const b = document.createElement("button");
+    b.type = "button"; b.dataset.v = v; b.textContent = LABELS[v];
+    b.setAttribute("aria-pressed", String(st.s === v));
+    b.onclick = () => {
+      const cur = state[i] || {};
+      cur.s = cur.s === v ? "" : v;
+      state[i] = cur; save();
+      li.dataset.s = cur.s;
+      marks.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.v === cur.s)));
+      count();
+    };
+    marks.appendChild(b);
+  }
+  const note = li.querySelector("textarea");
+  note.value = st.n || "";
+  note.oninput = () => { state[i] = Object.assign(state[i] || {}, { n: note.value }); save(); };
+  list.appendChild(li);
+});
+count();
+
+function results() {
+  const lines = ["Checklist: " + data.title, "Copied " + new Date().toLocaleString(), ""];
+  data.steps.forEach((step, i) => {
+    const st = state[i] || {};
+    lines.push((i + 1) + ". [" + (st.s || "not marked") + "] " + step.title);
+    if (st.n && st.n.trim()) lines.push("   note: " + st.n.trim().replace(/\n/g, "\n   "));
+  });
+  return lines.join("\n");
+}
+
+document.getElementById("copy").onclick = async () => {
+  const text = results();
+  const out = document.getElementById("out");
+  try {
+    await navigator.clipboard.writeText(text);
+    document.getElementById("copy").textContent = "Copied";
+    setTimeout(() => document.getElementById("copy").textContent = "Copy results", 2000);
+  } catch (e) {
+    out.value = text; out.style.display = "block"; out.select();
+  }
+};
+let armed = false;
+document.getElementById("reset").onclick = (ev) => {
+  if (!armed) { armed = true; ev.target.textContent = "Sure? Click again"; setTimeout(() => { armed = false; ev.target.textContent = "Clear marks"; }, 3000); return; }
+  state = {}; save(); location.reload();
+};
+</script>
+</body>
+</html>
+"""
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("markdown")
+    ap.add_argument("-o", "--out", help="output file (default: the .md name with .html)")
+    a = ap.parse_args()
+    src = Path(a.markdown)
+    try:
+        text = src.read_text(encoding="utf-8")
+    except OSError as e:
+        sys.exit(f"moddev-checklist: {e}")
+    title, intro, steps = parse(text)
+    if not steps:
+        sys.exit("moddev-checklist: no steps found (each step starts with a '## ' heading)")
+    # Marks are kept per guide: a new version of the steps starts clean
+    ident = hashlib.sha1(text.encode()).hexdigest()[:12]
+    data = json.dumps({"id": ident, "title": title, "steps": steps}).replace("</", "<\\/")
+    page = PAGE.replace("__TITLE__", html.escape(title)).replace("__INTRO__", intro).replace("__DATA__", data)
+    out = Path(a.out) if a.out else src.with_suffix(".html")
+    out.write_text(page, encoding="utf-8")
+    print(f"wrote {out}: {len(steps)} steps")
+
+
+if __name__ == "__main__":
+    main()
