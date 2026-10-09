@@ -8,6 +8,10 @@
 - `moddev-logsummary`: exceptions grouped by type and by the mod that threw them,
   GameEvents handler exceptions, repeated `[ERR]` lines, assemblies that failed to load;
   `--compare A B` lists what changed between two logs
+- `moddev-ab`: two `moddev-headless` runs that differ only in the files you name,
+  and the comparison of their logs
+- `moddev-csproj`: writes a `net48` SDK-style project from a mod's old Visual Studio
+  project, with references found in your game, so it builds with `dotnet build`
 - `docs/rebuild-old-bundles.md` tests the bundle with `moddev-headless`
 - CI: GitHub Actions checks that the image still builds on every push and pull
   request (nothing is pushed to a registry)

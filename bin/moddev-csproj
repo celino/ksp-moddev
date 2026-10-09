@@ -1,0 +1,328 @@
+#!/usr/bin/env python3
+"""Makes a buildable SDK-style project out of a KSP mod's .csproj.
+
+Usage: moddev-csproj [--game DIR] [--out DIR] [--ref DLL] [--build] Mod.csproj
+
+Many KSP mods ship an old Visual Studio project: references that point at
+C:\\Program Files (x86)\\Steam\\..., $(KSPDIR) or a Libs folder, post-build
+steps that run .bat files, and a .NET 3.5/4.x target that needs Mono or
+Windows. This leaves that project alone and writes a new net48 one (in --out,
+by default ./build-<project name>) that compiles the same source files against
+your game, so `dotnet build` works on Linux and in this image. Projects it
+references are converted too, into subfolders.
+
+Each reference is looked up by file name: first in KSP_Data/Managed (or
+KSP_x64_Data/Managed), then anywhere under GameData. With --build, the project
+is built right away, and a missing reference reported by the compiler
+(CS0012: "You must add a reference to assembly X") is looked up and added.
+"""
+import argparse
+import os
+import re
+import subprocess
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+FRAMEWORK = re.compile(r"^(System(\..+)?|mscorlib|Microsoft\.CSharp|netstandard|WindowsBase|PresentationCore)$")
+PASSTHROUGH = ("Publicize", "DoNotPublicize")
+# Properties worth carrying over, from the unconditioned group or the Release one
+KEEP = ["AssemblyName", "RootNamespace", "DefineConstants", "AllowUnsafeBlocks", "LangVersion",
+        "Nullable", "GenerateAssemblyInfo", "EnableDefaultCompileItems", "Version", "FileVersion",
+        "AssemblyVersion"]
+
+
+def local(tag):
+    return tag.rsplit("}", 1)[-1]
+
+
+def children(node, name):
+    return [c for c in node.iter() if local(c.tag) == name]
+
+
+def text_of(node, name):
+    for c in node:
+        if local(c.tag) == name:
+            return (c.text or "").strip()
+    return None
+
+
+def winpath(p):
+    return p.replace("\\", "/")
+
+
+class Game:
+    def __init__(self, root):
+        self.root = Path(root)
+        self.managed = next((self.root / d / "Managed" for d in ("KSP_Data", "KSP_x64_Data")
+                             if (self.root / d / "Managed").is_dir()), None)
+        if self.managed is None:
+            mac = self.root / "KSP.app/Contents/Resources/Data/Managed"
+            self.managed = mac if mac.is_dir() else None
+        self._gamedata = None
+
+    def gamedata_dlls(self):
+        if self._gamedata is None:
+            self._gamedata = {}
+            for dirpath, _, files in os.walk(self.root / "GameData", followlinks=True):
+                for f in files:
+                    if f.lower().endswith(".dll"):
+                        self._gamedata.setdefault(f.lower(), []).append(Path(dirpath) / f)
+        return self._gamedata
+
+    def find(self, filename, hint=""):
+        """Returns (path or glob, note). hint is the original HintPath, used to pick between copies."""
+        if "*" in filename:
+            if self.managed and list(self.managed.glob(filename)):
+                return str(self.managed / filename), ""
+            m = re.search(r"(?i)(^|/)GameData/(.*)$", winpath(hint))
+            if m and list((self.root / "GameData").glob(m.group(2))):
+                return str(self.root / "GameData" / m.group(2)), ""
+            return None, "no match"
+        if self.managed and (self.managed / filename).is_file():
+            return str(self.managed / filename), ""
+        hits = self.gamedata_dlls().get(filename.lower(), [])
+        if not hits:
+            return None, "not found in the game"
+        if len(hits) > 1:
+            # Prefer the copy whose folder names match the original hint path the most
+            parts = set(p.lower() for p in winpath(hint).split("/"))
+            hits.sort(key=lambda h: (-len(parts & set(p.lower() for p in h.parts)), len(str(h))))
+            return str(hits[0]), f"{len(hits)} copies in GameData, took the best match"
+        return str(hits[0]), ""
+
+
+def read_project(path):
+    tree = ET.parse(path)
+    root = tree.getroot()
+    sdk = bool(root.get("Sdk")) or any(local(c.tag) == "Sdk" for c in root)
+    props = {}
+    for group in children(root, "PropertyGroup"):
+        cond = (group.get("Condition") or "").replace(" ", "")
+        if cond and "Release" not in cond:
+            continue
+        for c in group:
+            name = local(c.tag)
+            if (name in KEEP or name.startswith("KSPBT_")) and (c.text or "").strip():
+                if name == "DefineConstants" and name in props:
+                    props[name] += ";" + c.text.strip()
+                else:
+                    props[name] = c.text.strip()
+    refs = []
+    for r in children(root, "Reference"):
+        include = r.get("Include") or ""
+        refs.append((include, text_of(r, "HintPath") or ""))
+    compiles, removes = [], []
+    for c in children(root, "Compile"):
+        if c.get("Include"):
+            compiles.append(c.get("Include"))
+        if c.get("Remove"):
+            removes.append(c.get("Remove"))
+    packages = [(p.get("Include"), p.get("Version") or text_of(p, "Version") or "")
+                for p in children(root, "PackageReference") if p.get("Include")]
+    events = [local(c.tag) for c in root.iter() if local(c.tag) in ("PreBuildEvent", "PostBuildEvent")
+              and (c.text or "").strip()]
+    events += [f"Target {t.get('Name')}" for t in children(root, "Target")]
+    imports = [i.get("Project") for i in children(root, "Import")
+               if i.get("Project") and "Microsoft.CSharp.targets" not in i.get("Project")
+               and "Microsoft.Common.props" not in i.get("Project")]
+    projrefs = [winpath(r.get("Include")) for r in children(root, "ProjectReference") if r.get("Include")]
+    # Items read by packages, kept as they are (Krafs.Publicizer)
+    passthrough = [(local(c.tag), c.get("Include")) for c in root.iter()
+                   if local(c.tag) in PASSTHROUGH and c.get("Include")]
+    # Item lists a Reference may point at, as in <Reference Include="@(_ModuleManagerFiles)" />
+    itemlists = {}
+    for group in children(root, "ItemGroup"):
+        for c in group:
+            if c.get("Include"):
+                itemlists.setdefault(local(c.tag), []).append(c.get("Include"))
+    refs = [(inc, hint) for inc, hint in refs if not inc.startswith("@(")] + [
+        (path, "") for inc, _ in refs if inc.startswith("@(")
+        for path in itemlists.get(inc[2:].rstrip(")"), [inc])]
+    return sdk, props, refs, compiles, removes, packages, events, imports, projrefs, passthrough
+
+
+def resolve_refs(refs, game, extra):
+    """Returns (resolved [(name, path)], notes, framework names)."""
+    out, notes, framework, seen = [], [], [], set()
+    for include, hint in refs:
+        name = include.split(",")[0].strip()
+        if FRAMEWORK.match(name):
+            framework.append(name)
+            continue
+        if "@(" in include:
+            notes.append(f"skipped reference {include} (an item list from the original build)")
+            continue
+        src = winpath(hint or include)
+        filename = src.rsplit("/", 1)[-1] if src.lower().endswith(".dll") else name + ".dll"
+        path, note = game.find(filename, src)
+        if path is None:
+            notes.append(f"MISSING {name}: {filename} {note} (original: {hint or include})")
+            continue
+        if path not in seen:
+            seen.add(path)
+            out.append((name, path))
+            if note:
+                notes.append(f"{name}: {note} ({path})")
+    for dll in extra:
+        p = Path(dll)
+        if not p.is_file():
+            hit, note = game.find(p.name if p.name.lower().endswith(".dll") else p.name + ".dll")
+            if hit is None:
+                notes.append(f"MISSING --ref {dll}: {note}")
+                continue
+            p = Path(hit)
+        if str(p) not in seen:
+            seen.add(str(p))
+            out.append((p.stem, str(p.resolve() if p.exists() else p)))
+    return out, notes, framework
+
+
+def write_project(dest, src_dir, sdk, props, compiles, removes, packages, refs, framework, projrefs, origin, game_root, passthrough=()):
+    def esc(s):
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+    lines = ['<Project Sdk="Microsoft.NET.Sdk">',
+             f"  <!-- Made by moddev-csproj from {esc(str(origin))}. Rerun it instead of editing. -->",
+             "  <PropertyGroup>",
+             "    <TargetFramework>net48</TargetFramework>",
+             f"    <LangVersion>{esc(props.get('LangVersion', 'latest'))}</LangVersion>"]
+    for k in ("AssemblyName", "RootNamespace", "DefineConstants", "AllowUnsafeBlocks", "Nullable",
+              "Version", "FileVersion", "AssemblyVersion"):
+        if k in props:
+            lines.append(f"    <{k}>{esc(props[k])}</{k}>")
+    gen = props.get("GenerateAssemblyInfo", "true" if sdk else "false")
+    if any(name == "KSPBuildTools" for name, _ in packages):
+        # KSPBuildTools finds the game's DLLs itself once it knows where the game is. It must not
+        # install CKAN dependencies into it, though.
+        kspbt = {k: v for k, v in props.items() if k.startswith("KSPBT_")}
+        kspbt.update(KSPBT_GameRoot=str(game_root), KSPBT_InstallCKANDependencies="false")
+        lines += [f"    <{k}>{esc(v)}</{k}>" for k, v in kspbt.items()]
+    lines += [f"    <GenerateAssemblyInfo>{esc(gen)}</GenerateAssemblyInfo>",
+              "    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>",
+              "    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>",
+              "    <OutputPath>out/</OutputPath>",
+              "    <DebugType>portable</DebugType>",
+              "    <Optimize>true</Optimize>",
+              "    <NoWarn>$(NoWarn);CS0618;CS0649;CS0169;CS0414;CS0162;CS0219;MSB3277</NoWarn>",
+              f"    <ModSource>{esc(str(src_dir))}</ModSource>",
+              "  </PropertyGroup>",
+              "  <ItemGroup>"]
+    # An SDK-style project compiles every .cs under its folder unless told otherwise
+    if not compiles or (sdk and props.get("EnableDefaultCompileItems", "").lower() != "false"):
+        lines.append('    <Compile Include="$(ModSource)/**/*.cs" Exclude="$(ModSource)/obj/**;$(ModSource)/bin/**" />')
+    for c in compiles:
+        lines.append(f'    <Compile Include="$(ModSource)/{esc(winpath(c))}" />')
+    for r in removes:
+        lines.append(f'    <Compile Remove="$(ModSource)/{esc(winpath(r))}" />')
+    lines.append('    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />')
+    for name, ver in packages:
+        if name != "Microsoft.NETFramework.ReferenceAssemblies":
+            lines.append(f'    <PackageReference Include="{esc(name)}" Version="{esc(ver)}" PrivateAssets="all" />')
+    for name in sorted(set(framework)):
+        lines.append(f'    <Reference Include="{esc(name)}" />')
+    for name, path in refs:
+        if "*" in path:
+            lines.append(f'    <Reference Include="{esc(path)}"><Private>false</Private></Reference>')
+        else:
+            lines.append(f'    <Reference Include="{esc(name)}"><HintPath>{esc(path)}</HintPath><Private>false</Private></Reference>')
+    for pr in projrefs:
+        lines.append(f'    <ProjectReference Include="{esc(pr)}" />')
+    for kind, include in passthrough:
+        lines.append(f'    <{kind} Include="{esc(include)}" />')
+    lines += ["  </ItemGroup>", "</Project>", ""]
+    dest.write_text("\n".join(lines))
+
+
+def convert(src, out, game, extra, quiet, depth=0):
+    """Writes out/<AssemblyName>.csproj for src, and one subfolder per project it references.
+    Returns the written path."""
+    if depth > 8:
+        sys.exit(f"moddev-csproj: project references nest too deep at {src}")
+    try:
+        sdk, props, refs, compiles, removes, packages, events, imports, projrefs, passthrough = read_project(src)
+    except ET.ParseError as e:
+        sys.exit(f"moddev-csproj: cannot parse {src}: {e}")
+    props.setdefault("AssemblyName", src.stem)
+    out.mkdir(parents=True, exist_ok=True)
+    dest = out / f"{props['AssemblyName']}.csproj"
+    subs = []
+    for pr in projrefs:
+        sub_src = (src.parent / pr).resolve()
+        if not sub_src.is_file():
+            if not quiet:
+                print(f"  note: MISSING project reference {pr}")
+            continue
+        sub = convert(sub_src, out / sub_src.stem, game, extra, quiet, depth + 1)
+        subs.append(os.path.relpath(sub, out))
+    resolved, notes, framework = resolve_refs(refs, game, extra)
+    write_project(dest, src.parent, sdk, props, compiles, removes, packages, resolved, framework, subs, src, game.root, passthrough)
+    gone = [c for c in compiles if "*" not in c and not (src.parent / winpath(c)).is_file()]
+    if not quiet:
+        print(f"wrote {dest}")
+        print(f"  {'SDK-style' if sdk else 'old-style'} project, {len(compiles) or 'all'} source files, "
+              f"{len(resolved)} game/mod references" + (f", {len(subs)} project references" if subs else ""))
+        for n in notes:
+            print(f"  note: {n}")
+        if gone:
+            print(f"  note: {len(gone)} source files listed in the project do not exist ({', '.join(gone[:5])}"
+                  f"{', …' if len(gone) > 5 else ''}); the project may be out of date, check the .sln for another one")
+        for e in events:
+            print(f"  note: dropped {e} (it ran scripts from the original build; copy the output by hand)")
+        for i in imports:
+            print(f"  note: ignored import {i}")
+        for tt in sorted(src.parent.glob("*.tt")):
+            print(f"  note: {tt.name} is a T4 template; the .cs it generates is used as is, "
+                  "so a version number in it may be stale")
+    return dest
+
+
+# What the compiler says when a reference is missing: CS0012 (a type from a referenced
+# assembly needs another one) and CS1069 (a Unity type moved to a module assembly).
+MISSING = re.compile(r"error CS0012: .*?reference to assembly '([^,']+)"
+                     r"|error CS1069: .*?forwarded to assembly '([^,']+)")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("csproj")
+    ap.add_argument("--game", default=os.environ.get("KSP_DIR", "/ksp"), help="KSP 1.12 install (default: $KSP_DIR or /ksp)")
+    ap.add_argument("--out", help="output folder (default ./build-<project name>)")
+    ap.add_argument("--ref", action="append", default=[], help="extra DLL to reference, a path or a file name to look up (repeatable)")
+    ap.add_argument("--build", action="store_true", help="run dotnet build -c Release afterwards")
+    a = ap.parse_args()
+
+    src = Path(a.csproj).resolve()
+    if not src.is_file():
+        sys.exit(f"moddev-csproj: {a.csproj} not found")
+    game = Game(a.game)
+    if game.managed is None:
+        sys.exit(f"moddev-csproj: no KSP_Data/Managed under {a.game} (set --game or KSP_DIR)")
+    out = Path(a.out or f"build-{src.stem}").resolve()
+    extra = list(a.ref)
+    dest = convert(src, out, game, extra, quiet=False)
+    if not a.build:
+        print(f"next: dotnet build -c Release {dest}")
+        return
+    for attempt in range(6):
+        print(f"building ({'retry ' + str(attempt) if attempt else 'dotnet build -c Release'})")
+        r = subprocess.run(["dotnet", "build", "-c", "Release", "-nologo", str(dest)],
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        if r.returncode == 0:
+            for line in r.stdout.splitlines():
+                if " -> " in line or "Warning(s)" in line:
+                    print("  " + line.strip())
+            return
+        missing = sorted({a or b for a, b in MISSING.findall(r.stdout)} - set(extra))
+        if not missing:
+            errors = [l for l in r.stdout.splitlines() if ": error " in l]
+            print("\n".join(dict.fromkeys(errors)) or r.stdout[-6000:])
+            sys.exit(r.returncode)
+        print(f"  the compiler asks for: {', '.join(missing)}; adding and building again")
+        extra += missing
+        convert(src, out, game, extra, quiet=True)
+    sys.exit("moddev-csproj: still failing after adding the references the compiler asked for")
+
+
+if __name__ == "__main__":
+    main()

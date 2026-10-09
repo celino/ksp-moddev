@@ -1,0 +1,59 @@
+#!/bin/bash
+# Runs the game twice with moddev-headless, A then B, and compares the two logs.
+# Use it to show what a change does: the same install, save and steps, and only the
+# files you name differ between the runs.
+#
+# Options starting with --a- or --b- go to that run only (--b-put becomes --put in
+# run B); every other option goes to both. --out is the folder for A/, B/ and compare.md.
+#
+#   moddev-ab --b-put out/MyMod.dll=GameData/MyMod/Plugins/MyMod.dll
+#   moddev-ab --save test --add /work/MyProbe --until '\[MyProbe\] done' \
+#             --a-put old/MyMod.dll=GameData/MyMod/Plugins/MyMod.dll \
+#             --b-put new/MyMod.dll=GameData/MyMod/Plugins/MyMod.dll --out runs/fix
+#
+# Exit status: 0 when both runs reached the --until line, otherwise the first failing
+# run's moddev-headless status.
+set -euo pipefail
+
+if [ "${1:-}" = -h ] || [ "${1:-}" = --help ] || [ $# = 0 ]; then
+  sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+  echo; echo "Shared options are those of moddev-headless (see moddev-headless --help)."
+  [ $# = 0 ] && exit 1 || exit 0
+fi
+
+out="ab-$(date +%Y%m%d-%H%M%S)"; shared=(); a=(); b=(); ksp=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --out) out="$2"; shift 2 ;;
+    --a-*) a+=("--${1#--a-}" "$2"); shift 2 ;;
+    --b-*) b+=("--${1#--b-}" "$2"); shift 2 ;;
+    --keep|--prepare-only) echo "moddev-ab: $1 is not supported here; use moddev-headless" >&2; exit 1 ;;
+    --) shift; ksp=(-- "$@"); break ;;
+    *) shared+=("$1" "$2"); shift 2 ;;
+  esac
+done
+[ ${#a[@]} -gt 0 ] || [ ${#b[@]} -gt 0 ] || { echo "moddev-ab: nothing differs between A and B (use --a-... or --b-...)" >&2; exit 1; }
+mkdir -p "$out"
+here="$(dirname "$0")"
+headless() { if command -v moddev-headless >/dev/null; then moddev-headless "$@"; else "$here/moddev-headless" "$@"; fi; }
+summary() { if command -v moddev-logsummary >/dev/null; then moddev-logsummary "$@"; else "$here/moddev-logsummary" "$@"; fi; }
+
+status=0
+for run in A B; do
+  if [ $run = A ]; then extra=("${a[@]}"); else extra=("${b[@]}"); fi
+  echo "[moddev-ab] run $run: ${extra[*]:-(no changes)}"
+  rc=0; headless "${shared[@]}" "${extra[@]}" --out "$out/$run" "${ksp[@]}" || rc=$?
+  [ $status = 0 ] && status=$rc
+done
+
+if [ -f "$out/A/KSP.log" ] && [ -f "$out/B/KSP.log" ]; then
+  {
+    echo "<!-- A: ${a[*]:-(no changes)} | B: ${b[*]:-(no changes)} | both: ${shared[*]:-} -->"
+    summary --compare "$out/A/KSP.log" "$out/B/KSP.log"
+  } >"$out/compare.md"
+  echo; sed -n '2,$p' "$out/compare.md"
+  echo; echo "[moddev-ab] comparison in $out/compare.md"
+else
+  echo "[moddev-ab] a run left no KSP.log; nothing to compare" >&2
+fi
+exit $status

@@ -15,6 +15,7 @@ check "novnc"             bash -c 'test -f /usr/share/novnc/vnc.html && echo /us
 check "gl (llvmpipe)"     bash -c 'xvfb-run -a glxinfo -B | grep -m1 "OpenGL renderer"'
 check "parttools"         fetch-parttools
 check "headless tools"    bash -c 'moddev-headless --help >/dev/null && printf "KSP.log\n" >/tmp/st.log && moddev-logsummary /tmp/st.log | grep -m1 "Log summary"'
+check "csproj / a-b tools" bash -c 'moddev-csproj --help >/dev/null && moddev-ab --help >/dev/null && echo present'
 check "user uid"          bash -c 'echo "$(id -un) $(id -u):$(id -g)"'
 if [ -d "${KSP_DIR:-/ksp}/KSP_Data/Managed" ]; then
   check "KSP dlls (/ksp)" bash -c 'ls "$KSP_DIR/KSP_Data/Managed/Assembly-CSharp.dll"'
