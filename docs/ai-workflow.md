@@ -2,7 +2,7 @@
 
 This is how a real fix went, with the numbers from the logs. The mod is
 [RoverScience Continued](https://github.com/linuxgurugamer/RoverScience-Continued),
-the assistant is Claudinho (Claude, by Anthropic), and the human is me. It shows
+the assistant is Claudinho (Claude, by Anthropic), and the human is me, Evandro. It shows
 what the tools in this image are for, and where a person still has to be in the loop.
 
 The pull request: [RoverScience-Continued#12](https://github.com/linuxgurugamer/RoverScience-Continued/pull/12).
@@ -124,3 +124,6 @@ goes out, the lines the assistant wrote included. In practice:
 If you want your own assistant to work this way, point it at [AGENTS.md](../AGENTS.md).
 Claude Code users can also copy `.claude/skills/ksp-mod-fix/` into their mod's repo
 or `~/.claude/skills/`.
+
+No kerbals were harmed in this fix. One plane bounced on the Island Airfield runway
+a lot more than it should have.
