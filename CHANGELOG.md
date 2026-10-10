@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased: 1.1.0 "Headless Kerbal"
+## 1.1.0 "Headless Kerbal" (2026-10-10)
 
 - `moddev-headless`: runs KSP to the main menu (or to any log line) on a virtual
   screen, from a hardlinked scratch copy of a cached mirror of the install, and
