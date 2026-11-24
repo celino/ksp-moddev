@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """Summarizes a KSP.log (or Player.log): what loaded, what threw, and how often.
 
-Usage: moddev-logsummary [--since HH:MM:SS] [--top N] KSP.log
+Usage: moddev-logsummary [--since HH:MM:SS] [--top N] [--mod REGEX]... [--known FILE] KSP.log
        moddev-logsummary --compare A/KSP.log B/KSP.log   (what changed from A to B)
 
 Groups exceptions by type and by the first stack frame that belongs to a mod
 (Unity, Mono and System frames are skipped), groups [ERR] lines by message with
 numbers masked, and lists assemblies that failed to load. The output is
 Markdown, so it reads the same in a terminal, a PR or an AI assistant.
+
+--mod REGEX   also lists the log lines that match (repeat it for several subjects)
+--known FILE  hides, and counts, the [ERR]/exception entries that match a regex in FILE
+              (one regex per line, "#" starts a comment): the noise you already know about,
+              so only what is new is left. --show-known lists them anyway.
 """
 import argparse
 import re
@@ -71,6 +76,9 @@ class Summary:
     def __init__(self):
         self.exc, self.handlers, self.errs, self.loads = Counter(), Counter(), Counter(), Counter()
         self.first_seen = {}
+        self.hidden = 0
+        self.mods = ()
+        self.matches = []
         self.scenes = []
         self.first_time = self.last_time = ""
 
@@ -98,7 +106,7 @@ class Summary:
         return rows
 
 
-def collect(path, since=None):
+def collect(path, since=None, known=(), mods=()):
     try:
         lines = open(path, encoding="utf-8", errors="replace")
     except OSError as e:
@@ -111,6 +119,12 @@ def collect(path, since=None):
         if time:
             r.first_time = r.first_time or time
             r.last_time = time
+        if level in ("ERR", "EXC") and any(k.search(msg) for k in known):
+            r.hidden += 1
+            after_handler = bool(HANDLER.search(msg))
+            continue
+        if mods and any(m.search(msg) for m in mods):
+            r.matches.append(f"{level} {time} {msg[:220]}".replace("  ", " "))
         s = SCENE.search(msg)
         if s:
             r.scenes.append((time, f"{s.group(1)} → {s.group(2)}"))
@@ -155,6 +169,14 @@ def table(title, header, rows):
         print("| " + " | ".join(str(c).replace("|", "\\|") for c in row) + " |")
 
 
+def load_known(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return [re.compile(l.strip()) for l in f if l.strip() and not l.lstrip().startswith("#")]
+    except (OSError, re.error) as e:
+        sys.exit(f"moddev-logsummary: --known {path}: {e}")
+
+
 def report(path, r, since, top):
     print(f"# Log summary: {path}")
     span = f"{r.first_time}–{r.last_time}" if r.first_time else "no timestamps (Player.log?)"
@@ -179,10 +201,16 @@ def report(path, r, since, top):
           [(n, r.first_seen[("r", k)], k) for k, n in r.errs.most_common(top)])
     table("Assemblies not found or not loaded (often just an optional dependency)", ["count", "message"],
           [(n, k) for k, n in r.loads.most_common(top)])
+    if r.hidden:
+        print(f"\n{r.hidden} known [ERR]/exception entries hidden (--show-known lists them).")
+    if r.mods:
+        print(f"\n## Lines matching --mod ({len(r.matches)}; showing the last {min(len(r.matches), top)})\n")
+        for line in r.matches[-top:]:
+            print("    " + line)
 
 
-def compare(path_a, path_b, since, top, show_all):
-    a, b = collect(path_a, since), collect(path_b, since)
+def compare(path_a, path_b, since, top, show_all, known=()):
+    a, b = collect(path_a, since, known), collect(path_b, since, known)
     print(f"# Log comparison\n\n- A: {path_a}\n- B: {path_b}\n")
     print("| | A | B |\n|---|---|---|")
     print(f"| reached main menu | {a.menu_text()} | {b.menu_text()} |")
@@ -216,17 +244,25 @@ def main():
     ap.add_argument("log", nargs="+", help="a log, or two with --compare")
     ap.add_argument("--since", help="only from this time on (HH:MM:SS, as in the log)")
     ap.add_argument("--top", type=int, default=15, help="rows per table (default 15)")
+    ap.add_argument("--mod", action="append", default=[], metavar="REGEX",
+                    help="also list the log lines that match (repeatable, case-insensitive)")
+    ap.add_argument("--known", metavar="FILE", help="file of regexes for known [ERR]/exception noise to hide and count")
+    ap.add_argument("--show-known", action="store_true", help="with --known, list the known entries anyway")
     ap.add_argument("--compare", action="store_true", help="compare two logs: what changed from the first to the second")
     ap.add_argument("--all", action="store_true", help="with --compare, also list counts that differ by less than 15%%")
     a = ap.parse_args()
+    known = [] if a.show_known or not a.known else load_known(a.known)
+    mods = [re.compile(m, re.I) for m in a.mod]
     if a.compare:
         if len(a.log) != 2:
             ap.error("--compare takes exactly two logs")
-        compare(a.log[0], a.log[1], a.since, a.top, a.all)
+        compare(a.log[0], a.log[1], a.since, a.top, a.all, known)
     elif len(a.log) != 1:
         ap.error("one log at a time (or --compare A B)")
     else:
-        report(a.log[0], collect(a.log[0], a.since), a.since, a.top)
+        r = collect(a.log[0], a.since, known, mods)
+        r.mods = mods
+        report(a.log[0], r, a.since, a.top)
 
 
 if __name__ == "__main__":

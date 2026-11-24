@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+"""Waits for one thing in the KSP.log and answers with ONE line.
+
+Usage: moddev-wait --scene SPACECENTER           (MAINMENU, SPACECENTER, EDITOR, TRACKSTATION, FLIGHT)
+       moddev-wait 'Game State Saved'            (any regex)
+       moddev-wait --scene FLIGHT --timeout 900 --log /path/to/KSP.log
+
+It reads only lines written after it starts. If KSP is started again, the log is
+recreated and the reading restarts at the top of the new file. The default log is
+$KSP_DIR/KSP.log (KSP_DIR is set inside the moddev image), else ./KSP.log.
+
+Exit code and output:
+  0  ok <seconds>s: <the line>
+  1  timeout <seconds>s; last line: ...
+  2  KSP quit (process gone) ..., with the last exception seen, if any
+
+Handy for AI assistants and scripts: run it in the background and keep working, instead
+of polling with pgrep/sleep/tail loops that cost one call per check.
+"""
+import argparse
+import os
+import re
+import subprocess
+import sys
+import time
+
+
+def ksp_running():
+    return subprocess.run(["pgrep", "-x", "KSP.x86_64"], capture_output=True).returncode == 0
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("pattern", nargs="?", help="regex to wait for")
+    ap.add_argument("--scene", help="wait for the change to this scene")
+    ap.add_argument("--log", help="log to read (default $KSP_DIR/KSP.log or ./KSP.log)")
+    ap.add_argument("--timeout", type=int, default=600, help="seconds (default 600)")
+    ap.add_argument("--no-process-check", action="store_true",
+                    help="don't give up when no KSP process is running (e.g. the game runs on another machine)")
+    a = ap.parse_args()
+    if not a.pattern and not a.scene:
+        ap.error("give a regex or --scene")
+    target = re.compile(rf"Scene Change : From \w+ to {re.escape(a.scene)}\b" if a.scene else a.pattern)
+    path = a.log or os.path.join(os.environ.get("KSP_DIR", "."), "KSP.log")
+
+    start = time.time()
+    try:
+        st = os.stat(path)
+        ino, pos = st.st_ino, st.st_size
+    except FileNotFoundError:
+        ino, pos = None, 0
+    seen_running = ksp_running()
+    last = last_exc = rest = ""
+
+    while True:
+        elapsed = int(time.time() - start)
+        try:
+            st = os.stat(path)
+            if st.st_ino != ino or st.st_size < pos:  # log recreated: KSP was started again
+                ino, pos, rest = st.st_ino, 0, ""
+            if st.st_size > pos:
+                with open(path, encoding="utf-8", errors="replace") as f:
+                    f.seek(pos)
+                    chunk = f.read()
+                    pos = f.tell()
+                lines = (rest + chunk).split("\n")
+                rest = lines.pop()
+                for line in lines:
+                    if line.strip():
+                        last = line
+                    if line.startswith("[EXC"):
+                        last_exc = line
+                    if target.search(line):
+                        print(f"ok {elapsed}s: {line[:200]}")
+                        return 0
+        except FileNotFoundError:
+            pass
+
+        if not a.no_process_check:
+            running = ksp_running()
+            seen_running = seen_running or running
+            if seen_running and not running:
+                print(f"KSP quit (process gone) after {elapsed}s; last line: {last[:200]}")
+                if last_exc:
+                    print(f"last exception: {last_exc[:200]}")
+                return 2
+        if elapsed >= a.timeout:
+            print(f"timeout {elapsed}s; last line: {last[:200]}")
+            return 1
+        time.sleep(1)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

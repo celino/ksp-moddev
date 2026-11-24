@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- `moddev-logsummary --mod REGEX` also lists the log lines about one subject (repeatable)
+- `moddev-logsummary --known FILE` hides and counts the `[ERR]`/exception entries you already know
+  about, so only what is new is left (`--show-known` lists them anyway); works with `--compare`
+- `moddev-wait`: waits for a scene change or a log line and answers with one line, and says so if
+  KSP quit, instead of `pgrep`/`sleep`/`tail` loops
+- `docs/headless-lessons.md`: what cost hours in hundreds of headless and GPU rounds
+
 ## 1.1.0 "Headless Kerbal" (2026-10-10)
 
 - `moddev-headless`: runs KSP to the main menu (or to any log line) on a virtual

@@ -84,6 +84,7 @@ docker compose exec -u modder moddev bash
 | `moddev-selftest` | checks the image |
 | `moddev-headless` | runs KSP to the main menu without a screen and summarizes the log |
 | `moddev-logsummary <log>` | groups the exceptions and errors in a `KSP.log` or `Player.log` |
+| `moddev-wait` | waits for a scene change or a log line and answers with one line (also says if KSP quit) |
 | `moddev-ab` | runs the game twice, with and without your change, and compares the logs |
 | `moddev-csproj <x.csproj>` | makes a mod's old Visual Studio project build here |
 | `moddev-checklist <steps.md>` | turns written steps into a page to tick off while you test |
