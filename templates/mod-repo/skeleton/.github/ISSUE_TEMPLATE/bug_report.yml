@@ -1,0 +1,26 @@
+name: Bug report
+description: Something went wrong in the game
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to get there
+  - type: input
+    id: versions
+    attributes:
+      label: Versions (KSP, this mod, the mods it depends on)
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: KSP.log
+      description: Attach it, or paste the lines around the error. Check it for personal paths first.
+    validations:
+      required: true

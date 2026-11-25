@@ -1,0 +1,31 @@
+name: Validate
+
+# Checks the repo on every push and pull request. The DLL is not built here: it needs KSP's own assemblies, so the
+# release zip comes from a local build (tools/build.sh, tools/package.sh) and is attached to the release by hand.
+on:
+  push:
+    branches: [ "master", "main" ]
+    tags: [ "v*" ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            python3 tools/validate.py --tag "${{ github.ref_name }}"
+          else
+            python3 tools/validate.py
+          fi
+      - name: Scripts parse
+        run: |
+          bash -n tools/build.sh tools/check-reproducible.sh
+          sh -n tools/package.sh
+          python3 -m py_compile tools/validate.py tools/release-notes.py

@@ -1,0 +1,9 @@
+dist/
+*.dll
+*.pdb
+__pycache__/
+*.pyc
+*.bak-*
+ksp-test/
+obj/
+out/

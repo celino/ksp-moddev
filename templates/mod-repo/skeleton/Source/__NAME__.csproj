@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Optional: for an IDE. The reproducible build is tools/build.sh (mcs). KspDir comes from -p:KspDir=... or $KSP_DIR. -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>{{NAME}}</AssemblyName>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <OutputPath>out/</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <KspDir Condition="'$(KspDir)' == ''">$(KSP_DIR)</KspDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <Reference Include="$(KspDir)/KSP_Data/Managed/Assembly-CSharp.dll"><Private>false</Private></Reference>
+    <Reference Include="$(KspDir)/KSP_Data/Managed/UnityEngine*.dll"><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

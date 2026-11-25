@@ -8,6 +8,14 @@
 - `moddev-wait`: waits for a scene change or a log line and answers with one line, and says so if
   KSP quit, instead of `pgrep`/`sleep`/`tail` loops
 - `docs/headless-lessons.md`: what cost hours in hundreds of headless and GPU rounds
+- `templates/test-driver/`: a test-only addon that plays a scenario written in a config file (open scenes, read values,
+  `expect`), logs `ASSERT PASS/FAIL` and ends with `RESULT PASS` or `RESULT FAIL`; heartbeat file, watchdog, a runner that
+  survives scene changes, `build.sh` (mcs against the game's own libraries) and `run.sh` (installs, runs in a window,
+  removes everything, exit code 0/1/2)
+- `templates/mod-repo/`: `new-mod.sh` makes a mod repo with an honest-status README, a changelog with a "Flown in a career
+  save so far" line, `tools/validate.py`, a reproducible `tools/build.sh`, `package.sh` and CI
+- `skills/`: `in-game-test` (an in-game test with a person at the keyboard) and `mod-design` (the design of one mod
+  system, section by section, with a decision log), for Claude Code
 
 ## 1.1.0 "Headless Kerbal" (2026-10-10)
 
