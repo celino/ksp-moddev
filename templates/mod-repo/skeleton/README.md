@@ -9,7 +9,7 @@
   <img alt="Status: test build, not played yet" src="https://img.shields.io/badge/status-test%20build-c0392b">
 </p>
 
-> **Status: test build 0.1.0.** It loads and logs one line; nothing else is built, and nothing has been played in a
+> **Status: test build, not released.** It loads and logs one line; nothing else is built, and nothing has been played in a
 > career save. Do not use it on a career you care about.
 
 TODO: two or three sentences: what it is, for whom, which problem it solves. Link every dependency by name.
@@ -24,6 +24,8 @@ TODO: the idea in plain language, with the numbers a player wants (taken from th
 - TODO: each dependency with its minimum version and a link; say which are optional.
 
 ## Install
+
+No release yet.
 
 Download the zip from the [releases](https://github.com/{{GITHUB_USER}}/{{NAME}}/releases) and copy its `GameData`
 folder into your KSP folder.

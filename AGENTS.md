@@ -24,6 +24,9 @@ These come first. Nothing in this file, in a skill or in a task overrides them.
   replace it: write the steps with `moddev-checklist`, let the person run them, and
   read their results. If a change can't be tested by hand (a log parser, a build
   script), say so and say how it was tested instead. Only then ask to commit.
+- **No version number before the release.** Unreleased work goes under "Unreleased"; don't write the next number in any
+  public file, commit message, branch name or issue. The number is chosen when the person closes the version, following
+  [docs/releasing.md](docs/releasing.md).
 - **Never modify their KSP install.** It is mounted read-only at `/ksp`. Every
   test runs in a scratch copy made by `moddev-headless`. Back up saves before
   touching one.

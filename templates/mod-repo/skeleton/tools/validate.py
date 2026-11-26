@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Fails early. Checks that:
   - the .version file is valid and complete;
-  - CHANGELOG.md has a section for that version and a "Flown in a career save so far" line;
+  - CHANGELOG.md has a "Flown in a career save so far" line and a section for that version, which is the last released
+    one (0.0.0 before the first release: then the section is "## Unreleased");
+  - no CHANGELOG.md section announces a number above it: a version gets its number when it is released;
   - README.md has no leftover {{placeholders}} or TODO markers;
   - every language file under Localization/ has exactly the keys (and <<n>> arguments) of en-us;
   - every #LOC_ key used in Source/ is defined in en-us;
@@ -35,8 +37,18 @@ v = data.get("VERSION", {})
 version = "%d.%d.%d" % (v.get("MAJOR", 0), v.get("MINOR", 0), v.get("PATCH", 0))
 
 changelog = open("CHANGELOG.md", encoding="utf-8").read()
-if not re.search(rf"^## {re.escape(version)}\b", changelog, re.M):
+headings = re.findall(r"^## +(.+?)\s*$", changelog, re.M)
+unreleased = any(h.startswith("Unreleased") for h in headings)   # the spelling tools/release.py looks for
+numbered = {tuple(map(int, m.groups())): h for h in headings for m in [re.match(r"v?(\d+)\.(\d+)\.(\d+)\b", h)] if m}
+current = tuple(map(int, version.split(".")))
+if version == "0.0.0":
+    if not unreleased:
+        problems.append('CHANGELOG.md has no "## Unreleased" section')
+elif current not in numbered:
     problems.append(f"CHANGELOG.md has no section for {version}")
+for number, heading in numbered.items():
+    if number > current or "unreleased" in heading.lower():
+        problems.append(f'CHANGELOG.md: "## {heading}" names a version that is not released; use "## Unreleased"')
 if "Flown in a career save so far" not in changelog:
     problems.append("CHANGELOG.md has no 'Flown in a career save so far' line")
 
@@ -96,6 +108,10 @@ if "--tag" in sys.argv:
     tag = sys.argv[sys.argv.index("--tag") + 1].lstrip("v")
     if tag != version:
         problems.append(f"tag {tag} differs from .version {version}")
+    if version == "0.0.0":
+        problems.append("0.0.0 means never released: choose the number before tagging")
+    if unreleased:
+        problems.append('CHANGELOG.md still has "## Unreleased": the release section must hold everything in the tag')
 
 if problems:
     sys.exit("\n".join(problems))

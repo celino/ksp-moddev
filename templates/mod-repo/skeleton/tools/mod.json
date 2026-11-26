@@ -1,0 +1,9 @@
+{
+  "name": "{{NAME}}",
+  "branch": "master",
+  "remote": "github",
+  "host": "github",
+  "replace": [
+    { "file": "Source/{{NAME}}.cs", "regex": "(AssemblyVersion\\(\")\\d+\\.\\d+\\.\\d+(\\.0\"\\))" }
+  ]
+}

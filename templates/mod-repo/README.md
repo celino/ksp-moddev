@@ -6,19 +6,24 @@ build that gives the same bytes every time.
 
 ```sh
 ./new-mod.sh MyMod ~/dev/MyMod --author "Your Name" --github-user yourlogin
-cd ~/dev/MyMod && git init
+cd ~/dev/MyMod && git init -b master   # the release branch named in tools/mod.json
 python3 tools/validate.py        # fails on purpose until you replace the TODO lines in README.md
 tools/build.sh /path/to/KSP      # GameData/MyMod/Plugins/MyMod.dll
 tools/check-reproducible.sh /path/to/KSP
-tools/package.sh                 # dist/MyMod-0.1.0.zip
+tools/package.sh                 # dist/MyMod-dev.zip while the changelog has "## Unreleased"
 ```
+
+**Versions.** The skeleton starts at `0.0.0` with an "Unreleased" changelog section, and `validate.py` refuses a changelog
+section with a number above the one in the `.version` file. When you decide to close a version, `tools/release.py`
+writes the number and publishes it: follow [docs/releasing.md](../../docs/releasing.md).
 
 What you get:
 
 | file | what it is for |
 |---|---|
 | `README.md` | status first, then what it does, requirements, install, known issues, localization, building, credits. `TODO` marks what is yours to write |
-| `CHANGELOG.md` | one section per version, with a **"Flown in a career save so far"** line that says what was played and what only passed the checks |
+| `CHANGELOG.md` | "Unreleased" plus one section per released version, with a **"Flown in a career save so far"** line that says what was played and what only passed the checks |
+| `tools/release.py`, `tools/mod.json` | the release: `status`, `prepare` (writes the number) and `publish`; `mod.json` holds what differs from mod to mod |
 | `LICENSE` | MIT text with your name; a placeholder note says to choose before you publish |
 | `GameData/<Mod>/<Mod>.version` | for the version checker and CKAN; `URL` and `DOWNLOAD` stay empty until the repo is public |
 | `GameData/<Mod>/Localization/` | `en-us` and `pt-br` with one key, as an example |

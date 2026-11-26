@@ -1,7 +1,7 @@
 name: Validate
 
 # Checks the repo on every push and pull request. The DLL is not built here: it needs KSP's own assemblies, so the
-# release zip comes from a local build (tools/build.sh, tools/package.sh) and is attached to the release by hand.
+# release zip comes from a local build (tools/build.sh, tools/package.sh) and tools/release.py attaches it.
 on:
   push:
     branches: [ "master", "main" ]
@@ -28,4 +28,4 @@ jobs:
         run: |
           bash -n tools/build.sh tools/check-reproducible.sh
           sh -n tools/package.sh
-          python3 -m py_compile tools/validate.py tools/release-notes.py
+          python3 -m py_compile tools/validate.py tools/release-notes.py tools/release.py

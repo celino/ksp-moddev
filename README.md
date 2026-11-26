@@ -197,6 +197,9 @@ It was tested to the Space Center, an editor and back; flight is not covered.
 **Starting a mod repo.** [`templates/mod-repo/new-mod.sh`](templates/mod-repo/) makes a repo with an honest-status README,
 a changelog that says what was actually played, a validator, a build that gives the same bytes every time, the zip and CI.
 
+**Releasing.** A version gets its number only when you release it. The steps, for mods made with the template and for
+ksp-moddev itself, are in [docs/releasing.md](docs/releasing.md).
+
 ## Working with an AI assistant
 
 Most of these tools were made so an AI coding assistant can do the tedious part of

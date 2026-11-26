@@ -3,7 +3,7 @@ using System.Reflection;
 using KSP.Localization;
 using UnityEngine;
 
-[assembly: AssemblyVersion("0.1.0.0")]   // tools/validate.py checks this against the .version file
+[assembly: AssemblyVersion("0.0.0.0")]   // tools/validate.py checks this against the .version file
 
 namespace {{NAME}}
 {

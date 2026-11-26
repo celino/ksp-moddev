@@ -1,11 +1,14 @@
 #!/bin/sh
-# Builds dist/{{NAME}}-<version>.zip with GameData/ at the root (the layout SpaceDock and CKAN expect), plus README.md,
-# CHANGELOG.md and LICENSE. The DLL is not in git: run tools/build.sh first.
+# Builds dist/{{NAME}}-<version>.zip (-dev.zip while CHANGELOG.md has "## Unreleased") with GameData/ at the root (the
+# layout SpaceDock and CKAN expect), plus README.md, CHANGELOG.md and LICENSE. The DLL is not in git: run
+# tools/build.sh first.
 set -eu
 cd "$(dirname "$0")/.."
 dll=GameData/{{NAME}}/Plugins/{{NAME}}.dll
 [ ! -d Source ] || [ -f "$dll" ] || { echo "missing $dll: run tools/build.sh /path/to/KSP first" >&2; exit 1; }
 version=$(python3 -c 'import json; v = json.load(open("GameData/{{NAME}}/{{NAME}}.version"))["VERSION"]; print("%d.%d.%d" % (v["MAJOR"], v["MINOR"], v["PATCH"]))')
+# A changelog with unreleased changes means this is a test build, not the release of that number
+grep -q '^## Unreleased' CHANGELOG.md && version=dev
 out="dist/{{NAME}}-${version}.zip"
 rm -rf dist
 mkdir -p dist
