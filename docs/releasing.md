@@ -81,11 +81,11 @@ commands run from the mod's repo.
    python3 tools/release.py publish --yes    # does it
    ```
 
-   If the tag is already on the remote, on this same commit, `publish` finishes what is missing: it creates the release,
-   or attaches only the zip or `.sha256` that an existing release lacks.
-
    It pushes the commit, waits for CI, creates and pushes the tag `vX.Y.Z`, and creates the release with the zip, its
    `.sha256` and the changelog section as notes. It does not build or package: it uses the zip already in `dist/`.
+
+   If the tag is already on the remote, on this same commit, `publish` finishes what is missing: it creates the release,
+   or attaches only the zip or `.sha256` that an existing release lacks.
 
    On GitHub it watches one workflow run of that commit: if the repo has more than one workflow, check the others. On
    Gitea it waits only if the repo has `.gitea/workflows/`; that wait also needs `GITEA_TOKEN`, and it stops with an error
