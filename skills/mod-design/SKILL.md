@@ -15,7 +15,8 @@ A lean version: no agents, no hooks, no Word or PDF. Output is Markdown.
 monetization, competition or launch schedule.
 
 ## Before you start (at most 5 reads)
-1. The topic's folder and its project sheet, if any. Decisions already taken are **not** reopened.
+1. The topic's folder and its project sheet, if any (any page that says what the mod is and what was decided). Decisions
+   already taken are **not** reopened.
 2. The project's notes, only the part about this topic.
 3. Neighbouring design documents (`design-*.md` in the same folder), to cross dependencies.
 4. If the system touches another mod, read that mod's real cfg or code. A premise you read = **V** (verified); one you
@@ -24,10 +25,11 @@ monetization, competition or launch schedule.
    one. Do not rediscuss the finished ones.
 
 ## The file
-`design-<system>.md` in the topic's folder, headings and simple tables, relative links. Ask **once** "may I create the
+`design-<system>.md` in the topic's folder, in the person's language (translate the headings and markers below, and keep
+them the same from then on), headings and simple tables, relative links. Ask **once** "may I create the
 skeleton?", create it with every section as `[TO DESIGN]` **plus the "Decision log" at the end**, and write each decision
 **at the moment it is made** (not only when the section closes). Header: state (draft or approved), absolute date, link to
-the project sheet.
+the project sheet, if there is one.
 
 ## Decision log (what must not be lost)
 The file ends with `## Decision log`. It **only grows**: never summarize or delete (a revised decision is a new line that

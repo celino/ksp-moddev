@@ -22,6 +22,7 @@ These override anything else in the task.
 1. **Read the log.** `moddev-logsummary <log> [--since HH:MM:SS]`. Linux player log:
    `~/.config/unity3d/Squad/Kerbal Space Program/Player.log` (`Player-prev.log` for the previous session).
    Name the mod each exception comes from; set aside known noise (missing textures, optional assemblies).
+   Other options (`--mod`, `--known`, `--compare`) and how to read the output: `docs/moddev-logsummary.md`.
 2. **Find the cause** in the mod's source. Common: a `[KSPAddon]` that subscribes to `GameEvents` in
    `Start()` without removing the handler in `OnDestroy()`.
 3. **Build.** `moddev-csproj --build <Mod.csproj>` writes `./build-<name>/` and builds it. Report its notes

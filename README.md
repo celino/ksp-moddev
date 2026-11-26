@@ -83,7 +83,7 @@ docker compose exec -u modder moddev bash
 | `fetch-parttools` | downloads PartTools into `/opt/parttools` |
 | `moddev-selftest` | checks the image |
 | `moddev-headless` | runs KSP to the main menu without a screen and summarizes the log |
-| `moddev-logsummary <log>` | groups the exceptions and errors in a `KSP.log` or `Player.log` |
+| `moddev-logsummary <log>` | groups the exceptions and errors in a `KSP.log` or `Player.log` ([all options](docs/moddev-logsummary.md)) |
 | `moddev-wait` | waits for a scene change or a log line and answers with one line (also says if KSP quit) |
 | `moddev-ab` | runs the game twice, with and without your change, and compares the logs |
 | `moddev-csproj <x.csproj>` | makes a mod's old Visual Studio project build here |
@@ -177,13 +177,15 @@ moddev-ab --b-put /work/MyMod/bin/MyMod.dll=GameData/MyMod/Plugins/MyMod.dll --o
 
 `runs/fix/compare.md` lists the counts that changed, exceptions first. Errors logged
 every frame always differ a little between two runs, so changes under 15% are only
-counted (`moddev-logsummary --compare --all` lists them).
+counted (`moddev-logsummary --compare --all` lists them). Loading to the main menu takes a few minutes with a large mod
+list, since everything renders on the CPU.
 
 `moddev-logsummary KSP.log` works on any log, `Player.log` from your own game
 included: exceptions grouped by type and by the mod that threw them, exceptions
 inside GameEvents handlers, repeated `[ERR]` lines and assemblies that failed to
-load. Add `--since HH:MM:SS` to read only from a given moment. Loading to the main
-menu takes a few minutes with a large mod list, since everything renders on the CPU.
+load. `--since` reads from a given moment, `--mod` narrows the exceptions to one mod, `--known` hides the noise you
+already checked and `--compare` shows what changed between two logs: every option is explained in
+[docs/moddev-logsummary.md](docs/moddev-logsummary.md).
 
 **Scenarios that end in PASS or FAIL.** [`templates/test-driver/`](templates/test-driver/) is a test-only addon that
 plays a scenario written in a config file (open scenes, read values, `expect`) and ends the log with

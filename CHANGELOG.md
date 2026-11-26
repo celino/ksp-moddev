@@ -2,9 +2,12 @@
 
 ## Unreleased
 
-- `moddev-logsummary --mod REGEX` also lists the log lines about one subject (repeatable)
-- `moddev-logsummary --known FILE` hides and counts the `[ERR]`/exception entries you already know
-  about, so only what is new is left (`--show-known` lists them anyway); works with `--compare`
+- `moddev-logsummary` has a full reference ([docs/moddev-logsummary.md](docs/moddev-logsummary.md), also in the image)
+  and a complete `--help`; it now refuses a malformed `--since`, `--since` on a log without timestamps (both printed an
+  empty, clean-looking summary), `--top 0` and an invalid `--mod` regex
+- `moddev-logsummary --mod REGEX` narrows the exception tables to one subject (message or any stack frame) and lists
+  the log lines about it (repeatable); `--known FILE` hides and counts the `[ERR]`/exception entries you already know
+  about, so only what is new is left (`--show-known` turns that off); works with `--compare`
 - `moddev-wait`: waits for a scene change or a log line and answers with one line, and says so if
   KSP quit, instead of `pgrep`/`sleep`/`tail` loops
 - `docs/headless-lessons.md`: what cost hours in hundreds of headless and GPU rounds

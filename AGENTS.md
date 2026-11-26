@@ -48,14 +48,20 @@ These come first. Nothing in this file, in a skill or in a task overrides them.
 | `moddev-headless` | run KSP without a screen until the main menu or a log line you choose |
 | `moddev-ab --b-put NEW=DEST` | run twice, before and after a change, and compare the logs |
 | `moddev-logsummary KSP.log` | summarize a log: exceptions by mod, handler exceptions, `[ERR]` lines |
-| `moddev-logsummary --compare A B` | what changed between two logs |
+| `moddev-logsummary --since HH:MM:SS KSP.log` | only from that moment on (needs timestamps: not `Player.log`) |
+| `moddev-logsummary --mod REGEX KSP.log` | only the exceptions that involve one mod, and its log lines (repeatable) |
+| `moddev-logsummary --known known.txt KSP.log` | hide the noise already checked, one regex per line (`--show-known` shows it again) |
+| `moddev-logsummary --compare A B` | what changed between two logs (`--all` includes differences under 15%) |
 | `moddev-checklist steps.md` | turn steps you wrote into a page the person marks ok/odd/broken/skipped |
 | `templates/probe/` | a test-only addon that drives the game headless and logs what it sees |
 | `templates/test-driver/` | a test-only addon that plays a scenario from a config file and ends with `RESULT PASS` or `RESULT FAIL` |
 | `templates/mod-repo/new-mod.sh` | a new mod repo: README with status, changelog, `validate.py`, reproducible build, zip, CI |
 
+Before using `--mod`, `--known` or `--compare`, read [docs/moddev-logsummary.md](docs/moddev-logsummary.md): what each
+option filters, what it leaves complete, and how to read the output. It exits 0 even when the log is full of exceptions.
+
 Inside the container, this file and the templates are in `/opt/ksp-moddev/`, and the
-example checklists in `/opt/ksp-moddev/examples/`.
+example checklists in `/opt/ksp-moddev/examples/`. The log summary reference is in `/opt/ksp-moddev/docs/`.
 
 All of them print `--help`. A headless run takes 4 to 10 minutes with a large mod
 list (everything renders on the CPU), so plan runs, don't poll them.

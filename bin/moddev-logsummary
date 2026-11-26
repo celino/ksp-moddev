@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
 """Summarizes a KSP.log (or Player.log): what loaded, what threw, and how often.
 
-Usage: moddev-logsummary [--since HH:MM:SS] [--top N] [--mod REGEX]... [--known FILE] KSP.log
-       moddev-logsummary --compare A/KSP.log B/KSP.log   (what changed from A to B)
+Usage: moddev-logsummary [--since HH:MM:SS] [--top N] [--mod REGEX]... [--known FILE [--show-known]] KSP.log
+       moddev-logsummary --compare [--all] [--since HH:MM:SS] [--top N] [--known FILE] A/KSP.log B/KSP.log
 
 Groups exceptions by type and by the first stack frame that belongs to a mod
 (Unity, Mono and System frames are skipped), groups [ERR] lines by message with
 numbers masked, and lists assemblies that failed to load. The output is
-Markdown, so it reads the same in a terminal, a PR or an AI assistant.
-
---mod REGEX   also lists the log lines that match (repeat it for several subjects)
---known FILE  hides, and counts, the [ERR]/exception entries that match a regex in FILE
-              (one regex per line, "#" starts a comment): the noise you already know about,
-              so only what is new is left. --show-known lists them anyway.
+Markdown on stdout, so it reads the same in a terminal, a PR or an AI assistant.
 """
 import argparse
 import re
@@ -79,8 +74,12 @@ class Summary:
         self.hidden = 0
         self.mods = ()
         self.matches = []
+        self.mod_exc, self.mod_handlers = Counter(), Counter()
         self.scenes = []
         self.first_time = self.last_time = ""
+
+    def match_mods(self, msg, stack):
+        return any(m.search(t) for m in self.mods for t in (msg, *stack))
 
     def menu(self):
         return next((t for t, s in self.scenes if s.endswith("MAINMENU")), None)
@@ -112,6 +111,8 @@ def collect(path, since=None, known=(), mods=()):
     except OSError as e:
         sys.exit(f"moddev-logsummary: {e}")
     r = Summary()
+    r.mods = mods
+    handler_key = None  # the last handler entry, while its duplicate [EXC] line may still come
     # KSP logs an exception inside a GameEvents handler twice: the "Exception handling event"
     # line, then the exception itself (in Player.log after "Uploading Crash Report"). Count it once.
     after_handler = False
@@ -137,11 +138,17 @@ def collect(path, since=None, known=(), mods=()):
             r.handlers[key] += 1
             r.first_seen.setdefault(("h",) + key, time)
             after_handler = True
+            handler_key, handler_matched = key, r.match_mods(msg, stack)
+            if handler_matched:
+                r.mod_handlers[key] += 1
             continue
         if after_handler and msg.startswith("Uploading Crash Report"):
             continue
         if after_handler and level == "EXC":
             after_handler = False
+            # in KSP.log the stack trace can come with this duplicate line instead of the first one
+            if handler_key and not handler_matched and r.match_mods(msg, stack):
+                r.mod_handlers[handler_key] += 1
             continue
         after_handler = False
         if level == "EXC":
@@ -152,6 +159,8 @@ def collect(path, since=None, known=(), mods=()):
             key = (etype, where)
             r.exc[key] += 1
             r.first_seen.setdefault(("e",) + key, time)
+            if r.match_mods(msg, stack):
+                r.mod_exc[key] += 1
         elif level == "ERR":
             key = mask(msg)
             r.errs[key] += 1
@@ -193,10 +202,15 @@ def report(path, r, since, top):
     if r.first_time and r.menu() and not r.exceptions() and not r.errs and sys.stderr.isatty():
         print("Nominal. Jeb is bored.", file=sys.stderr)  # a modded KSP.log with nothing to report
 
+    exc, handlers = r.exc, r.handlers
+    if r.mods:
+        exc, handlers = r.mod_exc, r.mod_handlers
+        print(f"- exceptions matching --mod: {sum(exc.values()) + sum(handlers.values())} of {r.exceptions()} "
+              "(the two exception tables show only these)")
     table("Exceptions by type and first mod frame", ["count", "first", "exception", "where"],
-          [(n, r.first_seen[("e",) + k], k[0], k[1] or "?") for k, n in r.exc.most_common(top)])
+          [(n, r.first_seen[("e",) + k], k[0], k[1] or "?") for k, n in exc.most_common(top)])
     table("Exceptions inside GameEvents handlers", ["count", "first", "event", "handler class", "exception", "thrown at"],
-          [(n, r.first_seen[("h",) + k], k[0], k[1], k[2], k[3]) for k, n in r.handlers.most_common(top)])
+          [(n, r.first_seen[("h",) + k], k[0], k[1], k[2], k[3]) for k, n in handlers.most_common(top)])
     table("[ERR] lines (numbers masked)", ["count", "first", "message"],
           [(n, r.first_seen[("r", k)], k) for k, n in r.errs.most_common(top)])
     table("Assemblies not found or not loaded (often just an optional dependency)", ["count", "message"],
@@ -239,20 +253,81 @@ def compare(path_a, path_b, since, top, show_all, known=()):
               "in a run that lasted a little longer (--all lists them).")
 
 
+HELP_DETAILS = """\
+details:
+  --mod       Python regex, ignores case. An exception counts if its message or any line of its stack
+              trace matches. Only the two exception tables are filtered: totals, [ERR] table and
+              assemblies stay complete. "Lines matching --mod" searches messages only (not stack
+              traces), so it can say 0 while the tables show exceptions. Ignored with --compare.
+  --known     One Python regex per line, case-sensitive ("(?i)" at the start ignores case). A line
+              starting with "#" is a comment; a "#" after a regex is part of the regex. Matched against
+              the first line of [ERR] and [EXC] entries, never the stack. Hidden entries leave the
+              totals and every table; their number is printed at the end of a single-log summary.
+  --since     Two digits each, as in the log: 09:05:00. Skips everything before the first line stamped
+              at or after it. Needs timestamps, so it does not work on Player.log. Times have no date:
+              it cannot pick a moment after midnight in a log that started the evening before.
+  --compare   Prints what changed from A to B: totals, then the counts that differ. Counts above zero in
+              both runs that differ by less than 15% are only counted, unless --all.
+  --top       Limits each table, the --mod lines (the last N) and the --compare table (default 15).
+
+exit status:
+  0  the summary was printed, with or without exceptions in the log (read the output to know)
+  1  a log or the --known file could not be read, or a regex in it is invalid
+  2  wrong options (including an invalid --mod regex or --since time)
+
+examples:
+  moddev-logsummary KSP.log
+  moddev-logsummary --since 21:30:00 --mod RoverScience --mod RoverSci KSP.log
+  moddev-logsummary --known known.txt KSP.log
+  moddev-logsummary --compare --known known.txt before/KSP.log after/KSP.log
+"""
+
+
+def positive(text):
+    if not text.isdigit() or int(text) < 1:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a number of 1 or more")
+    return int(text)
+
+
+def clock(text):
+    if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d:[0-5]\d", text):
+        raise argparse.ArgumentTypeError(f"{text!r} is not HH:MM:SS (two digits each, like 09:05:00)")
+    return text
+
+
+def regex(text):
+    try:
+        return re.compile(text, re.I)
+    except re.error as e:
+        raise argparse.ArgumentTypeError(f"invalid regex {text!r}: {e}")
+
+
+def has_timestamps(path):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return any(STAMP.match(line.rstrip("\n")) for line in f)
+    except OSError as e:
+        sys.exit(f"moddev-logsummary: {e}")
+
+
 def main():
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("log", nargs="+", help="a log, or two with --compare")
-    ap.add_argument("--since", help="only from this time on (HH:MM:SS, as in the log)")
-    ap.add_argument("--top", type=int, default=15, help="rows per table (default 15)")
-    ap.add_argument("--mod", action="append", default=[], metavar="REGEX",
-                    help="also list the log lines that match (repeatable, case-insensitive)")
-    ap.add_argument("--known", metavar="FILE", help="file of regexes for known [ERR]/exception noise to hide and count")
-    ap.add_argument("--show-known", action="store_true", help="with --known, list the known entries anyway")
-    ap.add_argument("--compare", action="store_true", help="compare two logs: what changed from the first to the second")
-    ap.add_argument("--all", action="store_true", help="with --compare, also list counts that differ by less than 15%%")
+    ap = argparse.ArgumentParser(description="\n".join(__doc__.split("\n\n", 2)[::2]).strip(), epilog=HELP_DETAILS,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("log", nargs="+", help="a KSP.log or Player.log; two logs (A then B) with --compare")
+    ap.add_argument("--since", type=clock, metavar="HH:MM:SS", help="only from this time on (not for Player.log)")
+    ap.add_argument("--top", type=positive, default=15, metavar="N", help="rows per table (default 15)")
+    ap.add_argument("--mod", type=regex, action="append", default=[], metavar="REGEX",
+                    help="narrow the exception tables to one subject and list its lines (repeatable: any one matches)")
+    ap.add_argument("--known", metavar="FILE", help="hide and count the known [ERR]/exception noise listed in FILE")
+    ap.add_argument("--show-known", action="store_true", help="ignore --known: known entries show up as any other")
+    ap.add_argument("--compare", action="store_true", help="what changed from the first log (A) to the second (B)")
+    ap.add_argument("--all", action="store_true", help="with --compare, also list the differences under 15%%")
     a = ap.parse_args()
     known = [] if a.show_known or not a.known else load_known(a.known)
-    mods = [re.compile(m, re.I) for m in a.mod]
+    if a.since:
+        for path in a.log:
+            if not has_timestamps(path):
+                ap.error(f"--since needs timestamps and {path} has none (a Player.log?)")
     if a.compare:
         if len(a.log) != 2:
             ap.error("--compare takes exactly two logs")
@@ -260,8 +335,7 @@ def main():
     elif len(a.log) != 1:
         ap.error("one log at a time (or --compare A B)")
     else:
-        r = collect(a.log[0], a.since, known, mods)
-        r.mods = mods
+        r = collect(a.log[0], a.since, known, a.mod)
         report(a.log[0], r, a.since, a.top)
 
 

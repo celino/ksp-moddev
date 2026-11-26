@@ -1,6 +1,6 @@
 # Test: RoverScience with the ROC fix
 
-KSP-dev with RoverScience 2.3.5.10 and the test build of `RoverScienceCont.dll`.
+A test copy of KSP with RoverScience 2.3.5.10 and the test build of `RoverScienceCont.dll`.
 The official build throws one exception on every landing for each flight scene
 loaded before; with the fix it should throw none. Write down the clock time when
 you start, so the log can be read from that point.

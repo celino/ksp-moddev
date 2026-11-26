@@ -22,7 +22,7 @@ desktop GPU, and each has a cheap way around it. They are written down so you (o
 
 Bugs in `ScenarioModule.OnSave`, scene changes and "open the save straight into flight" only appear if something
 does those things. A test-only addon has to save, change scene and resume the save itself, and log what happened.
-([SceneCycle](https://github.com/celino/scene-cycle) does this from a small config.)
+(`templates/test-driver/` does this from a small config, with its `open` and `cycle` steps.)
 
 - **QuickStart always goes through the Space Center** before flight, so a mod that starts at the KSC never sees a
   "save opened in flight" bug with it. Remove QuickStart for those tests and resume the save from the main menu.

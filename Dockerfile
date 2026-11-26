@@ -90,6 +90,7 @@ COPY bin/ /usr/local/bin/
 COPY AGENTS.md /opt/ksp-moddev/
 COPY templates/ /opt/ksp-moddev/templates/
 COPY docs/examples/ /opt/ksp-moddev/examples/
+COPY docs/moddev-logsummary.md /opt/ksp-moddev/docs/
 COPY openbox/menu.xml /etc/xdg/openbox/menu.xml
 RUN chmod +x /usr/local/bin/*
 

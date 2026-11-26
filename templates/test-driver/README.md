@@ -47,5 +47,5 @@ scenario: `save` (leave it out to run from the main menu), `settle` (seconds to 
 
 ## Not covered
 
-Flight (needs a vessel: load a save straight into flight, or use a mod such as SceneCycle for that), screens that need a
+Flight (it needs a vessel: load a save straight into flight and add the steps for it), screens that need a
 click, anything that needs the pixels to be judged by eye.
