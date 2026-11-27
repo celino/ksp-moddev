@@ -189,10 +189,11 @@ already checked and `--compare` shows what changed between two logs: every optio
 
 **Scenarios that end in PASS or FAIL.** [`templates/test-driver/`](templates/test-driver/) is a test-only addon that
 plays a scenario written in a config file (open scenes, read values, `expect`) and ends the log with
-`[TestDriver] RESULT PASS` or `RESULT FAIL`. It has a heartbeat file and a watchdog, and it survives scene changes.
+`[TestDriver] RESULT PASS`, `RESULT FAIL` or `RESULT INCONCLUSIVE` (no `expect` passed). It has a heartbeat file and
+a watchdog, and it survives scene changes.
 `build.sh` compiles it against your game's own libraries and `run.sh` runs one scenario in a window on the desktop (the
 virtual-screen container is too slow for a big mod list, see [docs/headless-lessons.md](docs/headless-lessons.md)).
-It was tested to the Space Center, an editor and back; flight is not covered.
+It was tested to the Space Center, an editor and back, and in flight: launch, landing, docking, recovery and EVA.
 
 **Starting a mod repo.** [`templates/mod-repo/new-mod.sh`](templates/mod-repo/) makes a repo with an honest-status README,
 a changelog that says what was actually played, a validator, a build that gives the same bytes every time, the zip and CI.

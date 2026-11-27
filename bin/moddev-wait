@@ -5,14 +5,20 @@ Usage: moddev-wait --scene SPACECENTER           (MAINMENU, SPACECENTER, EDITOR,
        moddev-wait 'Game State Saved'            (any regex)
        moddev-wait --scene FLIGHT --timeout 900 --log /path/to/KSP.log
 
-It reads only lines written after it starts. If KSP is started again, the log is
-recreated and the reading restarts at the top of the new file. The default log is
-$KSP_DIR/KSP.log (KSP_DIR is set inside the moddev image), else ./KSP.log.
+By default it reads only lines written after it starts: a line that is already in the
+log when you call it is NOT seen (use --from-start for that). If KSP is started again,
+the log is recreated and the reading restarts at the top of the new file. The default
+log is $KSP_DIR/KSP.log (KSP_DIR is set inside the moddev image), else ./KSP.log.
+
+  --from-start   also look at what is already written (e.g. the RESULT line may be there)
+  --idle N       give up when no new line came for N seconds (a stuck game with the
+                 window open). Off by default: a slow load can be quiet for minutes.
 
 Exit code and output:
   0  ok <seconds>s: <the line>
   1  timeout <seconds>s; last line: ...
   2  KSP quit (process gone) ..., with the last exception seen, if any
+  3  idle: no new line for <N>s; last line: ...   (only with --idle)
 
 Handy for AI assistants and scripts: run it in the background and keep working, instead
 of polling with pgrep/sleep/tail loops that cost one call per check.
@@ -30,27 +36,39 @@ def ksp_running():
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("pattern", nargs="?", help="regex to wait for")
     ap.add_argument("--scene", help="wait for the change to this scene")
     ap.add_argument("--log", help="log to read (default $KSP_DIR/KSP.log or ./KSP.log)")
     ap.add_argument("--timeout", type=int, default=600, help="seconds (default 600)")
+    ap.add_argument("--from-start", action="store_true",
+                    help="also look at the lines already in the log (default: only new lines)")
+    ap.add_argument("--idle", type=int, metavar="N",
+                    help="exit 3 when no new line came for N seconds (default: off)")
     ap.add_argument("--no-process-check", action="store_true",
                     help="don't give up when no KSP process is running (e.g. the game runs on another machine)")
     a = ap.parse_args()
     if not a.pattern and not a.scene:
         ap.error("give a regex or --scene")
+    if a.idle is not None and a.idle < 1:
+        ap.error("--idle needs a number of seconds >= 1")
     target = re.compile(rf"Scene Change : From \w+ to {re.escape(a.scene)}\b" if a.scene else a.pattern)
     path = a.log or os.path.join(os.environ.get("KSP_DIR", "."), "KSP.log")
 
     start = time.time()
     try:
         st = os.stat(path)
-        ino, pos = st.st_ino, st.st_size
+        ino, pos = st.st_ino, (0 if a.from_start else st.st_size)
     except FileNotFoundError:
         ino, pos = None, 0
     seen_running = ksp_running()
     last = last_exc = rest = ""
+    last_new = start
+    if pos:  # the last line already written, so "last line:" says where the log stood
+        with open(path, "rb") as f:
+            f.seek(max(0, pos - 4096))
+            tail = [l for l in f.read(pos - f.tell()).decode("utf-8", "replace").split("\n") if l.strip()]
+            last = tail[-1] if tail else ""
 
     while True:
         elapsed = int(time.time() - start)
@@ -63,6 +81,7 @@ def main():
                     f.seek(pos)
                     chunk = f.read()
                     pos = f.tell()
+                last_new = time.time()
                 lines = (rest + chunk).split("\n")
                 rest = lines.pop()
                 for line in lines:
@@ -84,6 +103,9 @@ def main():
                 if last_exc:
                     print(f"last exception: {last_exc[:200]}")
                 return 2
+        if a.idle and time.time() - last_new >= a.idle:
+            print(f"idle: no new line for {int(time.time() - last_new)}s; last line: {last[:200]}")
+            return 3
         if elapsed >= a.timeout:
             print(f"timeout {elapsed}s; last line: {last[:200]}")
             return 1

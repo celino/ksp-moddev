@@ -6,6 +6,8 @@ Usage: python3 tools/release-notes.py 1.0.0   (a leading "v" is ignored)
 import re
 import sys
 
+if len(sys.argv) != 2:
+    sys.exit(__doc__)
 version = sys.argv[1].lstrip("v")
 text = open("CHANGELOG.md", encoding="utf-8").read()
 match = re.search(rf"^## {re.escape(version)}\b[^\n]*\n(.*?)(?=^## |\Z)", text, re.M | re.S)

@@ -119,6 +119,8 @@ It has no `release.py`. Follow the same order by hand: `## Unreleased` until the
 (`docker compose build` and `docker compose run --rm moddev moddev-selftest`); the person chooses the number; one commit
 `Release X.Y.Z` that turns the section into `## X.Y.Z (YYYY-MM-DD)` and updates the places that state the current
 version; approval; then push, CI, tag `vX.Y.Z`, release, and the same verification.
+The image workflow ignores pushes that only change Markdown, so a release commit like this may start no CI run: start it
+with `gh workflow run docker-build.yml --ref main` and wait for it before the tag.
 
 ## What has been tried
 

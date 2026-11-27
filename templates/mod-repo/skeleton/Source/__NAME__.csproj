@@ -4,6 +4,8 @@
     <TargetFramework>net48</TargetFramework>
     <AssemblyName>{{NAME}}</AssemblyName>
     <Deterministic>true</Deterministic>
+    <!-- the .cs file declares AssemblyVersion, which tools/validate.py checks: don't generate a second one -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     <OutputPath>out/</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>

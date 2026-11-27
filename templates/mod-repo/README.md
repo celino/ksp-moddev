@@ -4,6 +4,9 @@ A skeleton for a new KSP 1.12 mod repo that follows what has worked: an honest s
 what was actually played, a validator that fails early, a zip with `GameData/` at the root, CI that runs the checks, and a
 build that gives the same bytes every time.
 
+You need, on your own computer (the ksp-moddev image has no `mcs`): `bash`, `git`, `python3`, Mono's `mcs`, and a KSP 1.12
+install. `release.py` also needs a git remote, even for `status`.
+
 ```sh
 ./new-mod.sh MyMod ~/dev/MyMod --author "Your Name" --github-user yourlogin
 cd ~/dev/MyMod && git init -b master   # the release branch named in tools/mod.json

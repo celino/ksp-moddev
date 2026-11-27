@@ -57,7 +57,7 @@ These come first. Nothing in this file, in a skill or in a task overrides them.
 | `moddev-logsummary --compare A B` | what changed between two logs (`--all` includes differences under 15%) |
 | `moddev-checklist steps.md` | turn steps you wrote into a page the person marks ok/odd/broken/skipped |
 | `templates/probe/` | a test-only addon that drives the game headless and logs what it sees |
-| `templates/test-driver/` | a test-only addon that plays a scenario from a config file and ends with `RESULT PASS` or `RESULT FAIL` |
+| `templates/test-driver/` | a test-only addon that plays a scenario from a config file and ends with `RESULT PASS`, `RESULT FAIL` or `RESULT INCONCLUSIVE` (nothing proved) |
 | `templates/mod-repo/new-mod.sh` | a new mod repo: README with status, changelog, `validate.py`, reproducible build, zip, CI |
 
 Before using `--mod`, `--known` or `--compare`, read [docs/moddev-logsummary.md](docs/moddev-logsummary.md): what each

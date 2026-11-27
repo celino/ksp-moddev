@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+- `templates/test-driver/`: flight steps `launch` (only Available, not inactive crew), `focus`, `fly`, `land`, `dock`,
+  `recover`, `eva`; `force` (static member or `ScenarioModule` field, read back); `commnet-diag`; `expect state = ...`
+  (antenna, roster, crew, parachute, docking port, vessels, CommNet); steps of your own in a second file
+  (`partial void AddSteps()`), and `build.sh` builds every `.cs` in the folder
+- `templates/test-driver/run.sh`: `DRIVER_DLL` (a copy's own build) and `EXTRA` (a folder copied next to the driver),
+  so a copy calls this `run.sh` instead of keeping its own
+- `templates/test-driver/`: a round with no failure and no passed `expect` (or `Prove` in a step of your own) ends
+  `RESULT INCONCLUSIVE`, and `run.sh` exits 3 for it; a `RESULT PASS` without any `ASSERT PASS` line is also 3
+- `templates/test-driver/run.sh`: any `[TestDriver] ... FAIL` line (e.g. an expected offer that never came) makes the
+  round FAIL (exit 1), even when the driver said `RESULT PASS`
+- `templates/test-driver/run.sh`: `MENU_S` (no main menu in N seconds: exit 2) and `MAX_EXC` (more than N exceptions in
+  `KSP.log`: exit 1) stop a round early; both off by default
+- `templates/test-driver/run.sh`: `KEEP_LOG=1` keeps `KSP.log`, `Player.log`, `heartbeat.txt` and `result.txt` of the
+  round in `OUT_DIR`
+- `templates/test-driver/run.sh`: on a timeout, stops the game's whole process group and waits for it (`STOP_S`) before
+  removing anything; before, with a wrapper in `KSP_LAUNCH`, the game stayed open after "removed"
+- `templates/test-driver/run.sh`: a save path with spaces is removed whole (unquoted, its pieces were removed instead),
+  and the copied save is made writable
+- `moddev-wait --idle N`: exits 3 with `idle: no new line for Ns; last line: ...` when the log stops; off by default
+- `moddev-wait --from-start`: also finds a line already in the log (by default only new lines count, and `--help` now
+  says so)
+- `tools/test-templates.sh`: makes ToyMod in a temporary folder and runs `validate.py`, `build.sh`, `dotnet build` and
+  the test-driver's `build.sh`, then plays `run.sh` against a fake KSP (PASS, FAIL, INCONCLUSIVE, timeout with and
+  without a wrapper, the guards, `KEEP_LOG`, paths with spaces); skips what needs the KSP libraries, mcs or dotnet
+- `templates/mod-repo/`: `Source/<Mod>.csproj` compiles with `dotnet build` (it failed with a duplicate
+  `AssemblyVersion`); the README says to add a git remote before `release.py status`
+- `templates/test-driver/` and `templates/mod-repo/` READMEs say that `build.sh` needs Mono's `mcs`, which the image does
+  not have
+- [docs/releasing.md](docs/releasing.md): a release commit that only changes Markdown starts no image build; start it
+  with `gh workflow run docker-build.yml --ref main`
+- `tools/release-notes.py` (in `templates/mod-repo/`) prints its usage instead of a traceback when called without a
+  version; `.dockerignore` keeps the test-driver's `out/` out of the image
 - `moddev-logsummary` has a full reference ([docs/moddev-logsummary.md](docs/moddev-logsummary.md), also in the image)
   and a complete `--help`; it now refuses a malformed `--since`, `--since` on a log without timestamps (both printed an
   empty, clean-looking summary), `--top 0` and an invalid `--mod` regex

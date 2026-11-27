@@ -10,8 +10,10 @@ ksp="${1:-${KSP_DIR:-}}"
 [ -d "$ksp/KSP_Data/Managed" ] || { echo "usage: $0 /path/to/KSP" >&2; exit 1; }
 m="$ksp/KSP_Data/Managed"
 mkdir -p "$here/out"
-refs=(mscorlib System System.Core Assembly-CSharp UnityEngine UnityEngine.CoreModule UnityEngine.IMGUIModule
-      UnityEngine.ScreenCaptureModule UnityEngine.ImageConversionModule UnityEngine.PhysicsModule)
+refs=(mscorlib System System.Core Assembly-CSharp Assembly-CSharp-firstpass
+      UnityEngine UnityEngine.CoreModule UnityEngine.IMGUIModule UnityEngine.ScreenCaptureModule
+      UnityEngine.ImageConversionModule UnityEngine.PhysicsModule UnityEngine.UI)
 args=(); for r in "${refs[@]}"; do args+=("-r:$m/$r.dll"); done
-mcs -nostdlib -target:library -debug- -out:"$here/out/TestDriver.dll" "${args[@]}" "$here/TestDriver.cs"
+# every .cs here (TestDriver.cs, TestDriverSteps.cs and your own steps); EXTRA_CS adds files from elsewhere
+mcs -nostdlib -target:library -debug- -out:"$here/out/TestDriver.dll" "${args[@]}" "$here"/*.cs ${EXTRA_CS:-}
 echo "built $here/out/TestDriver.dll"
